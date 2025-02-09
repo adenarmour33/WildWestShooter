@@ -31,7 +31,6 @@ assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.svg';
 assets.weapons.smg.src = '/static/assets/weapons/smg.svg';
 assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
 
-
 // Initialize game after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     canvas = document.getElementById('gameCanvas');
@@ -109,6 +108,8 @@ document.addEventListener('DOMContentLoaded', () => {
         rotation: 0,
         health: 100,
         score: 0,
+        kills: 0,
+        deaths: 0,
         currentWeapon: 'pistol',
         lastShot: 0
     };
@@ -133,7 +134,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let gameState = {
         players: {},
         bullets: [],
-        localBullets: []
+        localBullets: [],
+        scores: {}
     };
 
     // UI elements
@@ -141,12 +143,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const healthText = document.querySelector('.health-text');
     const ammoCounter = document.getElementById('ammoCounter');
     const weaponSlots = document.querySelectorAll('.weapon-slot');
-    const joystickContainer = document.querySelector('.joystick-container');
-    const shootButton = document.getElementById('shootButton');
-    const reloadButton = document.getElementById('reloadButton');
-    const minimap = document.getElementById('minimap');
-    const minimapCtx = minimap ? minimap.getContext('2d') : null;
-
+    const scoreboardElement = document.getElementById('scoreboard');
+    const minimapElement = document.getElementById('minimap');
+    const minimapCtx = minimapElement ? minimapElement.getContext('2d') : null;
 
     function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -184,62 +183,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     canvas.addEventListener('mousedown', shoot);
-
-    if (joystickContainer) {
-        joystickContainer.addEventListener('touchstart', handleJoystickStart, { passive: false });
-        joystickContainer.addEventListener('touchmove', handleJoystickMove, { passive: false });
-        joystickContainer.addEventListener('touchend', handleJoystickEnd);
-    }
-
-    if (shootButton) {
-        shootButton.addEventListener('touchstart', shoot, { passive: false });
-    }
-
-    if (reloadButton) {
-        reloadButton.addEventListener('click', reload);
-    }
-
-    function handleJoystickStart(e) {
-        e.preventDefault();
-        const touch = e.touches[0];
-        if (!joystick.base) return;
-
-        const rect = joystick.base.getBoundingClientRect();
-        joystick.active = true;
-        joystick.baseX = rect.left + rect.width / 2;
-        joystick.baseY = rect.top + rect.height / 2;
-        updateJoystickPosition(touch.clientX, touch.clientY);
-    }
-
-    function handleJoystickMove(e) {
-        e.preventDefault();
-        if (!joystick.active) return;
-        const touch = e.touches[0];
-        updateJoystickPosition(touch.clientX, touch.clientY);
-    }
-
-    function updateJoystickPosition(x, y) {
-        if (!joystick.stick) return;
-
-        const deltaX = x - joystick.baseX;
-        const deltaY = y - joystick.baseY;
-        const distance = Math.min(60, Math.hypot(deltaX, deltaY));
-        const angle = Math.atan2(deltaY, deltaX);
-
-        joystick.deltaX = Math.cos(angle) * distance;
-        joystick.deltaY = Math.sin(angle) * distance;
-
-        joystick.stick.style.transform = `translate(${joystick.deltaX}px, ${joystick.deltaY}px)`;
-    }
-
-    function handleJoystickEnd() {
-        joystick.active = false;
-        joystick.deltaX = 0;
-        joystick.deltaY = 0;
-        if (joystick.stick) {
-            joystick.stick.style.transform = 'translate(0px, 0px)';
-        }
-    }
 
     function updateRotation() {
         const dx = mouseX - (player.x + PLAYER_SIZE/2);
@@ -314,6 +257,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function updateScoreboard() {
+        if (!scoreboardElement) return;
+
+        const scores = Object.entries(gameState.scores)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10);
+
+        scoreboardElement.innerHTML = `
+            <div class="scoreboard-header">Top Players</div>
+            ${scores.map(([id, score]) => `
+                <div class="scoreboard-row">
+                    <span class="player-name">${gameState.players[id]?.username || 'Unknown'}</span>
+                    <span class="player-score">${score}</span>
+                </div>
+            `).join('')}
+        `;
+    }
+
     function updateUI() {
         if (healthBar && healthText) {
             healthBar.style.width = `${player.health}%`;
@@ -325,9 +286,13 @@ document.addEventListener('DOMContentLoaded', () => {
             ammoCounter.textContent = weapon.ammo !== undefined ? 
                 `${weapon.ammo}/${weapon.maxAmmo}` : '∞';
         }
+
+        updateScoreboard();
     }
 
     function update(deltaTime) {
+        if (player.health <= 0) return;
+
         // Update player movement
         player.velX = 0;
         player.velY = 0;
@@ -414,6 +379,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Draw other players
         Object.values(gameState.players).forEach(p => {
+            if (p.health <= 0) return;
+
             const screenX = p.x - camera.x;
             const screenY = p.y - camera.y;
 
@@ -425,20 +392,50 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.restore();
             }
 
+            // Draw player name and health
             ctx.fillStyle = '#ffffff';
             ctx.font = '12px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(p.username, screenX + PLAYER_SIZE/2, screenY - 10);
+            ctx.fillText(p.username, screenX + PLAYER_SIZE/2, screenY - 20);
+
+            // Health bar
+            const healthBarWidth = 32;
+            const healthBarHeight = 4;
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(screenX, screenY - 10, healthBarWidth, healthBarHeight);
+            ctx.fillStyle = '#00ff00';
+            ctx.fillRect(screenX, screenY - 10, (p.health / 100) * healthBarWidth, healthBarHeight);
         });
 
-        // Draw player
-        if (assets.player.complete) {
+        // Draw player if alive
+        if (player.health > 0 && assets.player.complete) {
             ctx.save();
             ctx.translate(player.x - camera.x + PLAYER_SIZE/2, player.y - camera.y + PLAYER_SIZE/2);
             ctx.rotate(player.rotation);
             ctx.drawImage(assets.player, -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
             ctx.restore();
         }
+    }
+
+    function updateMinimap() {
+        if (!minimapCtx) return;
+
+        minimapCtx.clearRect(0, 0, 150, 150);
+        minimapCtx.fillStyle = 'rgba(0, 255, 0, 0.1)';
+        minimapCtx.fillRect(0, 0, 150, 150);
+
+        const playerX = (player.x / (map.width * tileSize)) * 150;
+        const playerY = (player.y / (map.height * tileSize)) * 150;
+        minimapCtx.fillStyle = '#e74c3c';
+        minimapCtx.fillRect(playerX - 2, playerY - 2, 4, 4);
+
+        minimapCtx.fillStyle = '#3498db';
+        Object.values(gameState.players).forEach(p => {
+            if (p.health <= 0) return;
+            const x = (p.x / (map.width * tileSize)) * 150;
+            const y = (p.y / (map.height * tileSize)) * 150;
+            minimapCtx.fillRect(x - 2, y - 2, 4, 4);
+        });
     }
 
     let lastTimestamp = 0;
@@ -463,42 +460,33 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState.bullets = state.bullets.map(b => new Bullet(
             b.x, b.y, b.angle, BULLET_SPEED, b.damage, b.weapon, b.shooter
         ));
+        gameState.scores = state.scores;
+        updateUI();
     });
 
     socket.on('player_hit', (data) => {
         player.health -= data.damage;
         updateUI();
         if (player.health <= 0) {
-            socket.emit('player_died');
+            player.deaths++;
+            socket.emit('player_died', { shooter: data.shooter });
         }
     });
-    socket.on('player_joined', (data) => {
-        console.log(`${data.username} joined the game`);
+
+    socket.on('player_respawn', (data) => {
+        player.x = data.x;
+        player.y = data.y;
+        player.health = 100;
+        player.velX = 0;
+        player.velY = 0;
+        updateUI();
     });
 
-    socket.on('player_left', (data) => {
-        console.log(`${data.username} left the game`);
+    socket.on('player_kill', (data) => {
+        player.kills++;
+        player.score += 100; // Award points for a kill
+        updateUI();
     });
-
-    function updateMinimap() {
-        if (!minimapCtx) return;
-
-        minimapCtx.clearRect(0, 0, 150, 150);
-        minimapCtx.fillStyle = 'rgba(0, 255, 0, 0.1)';
-        minimapCtx.fillRect(0, 0, 150, 150);
-
-        const playerX = (player.x / (map.width * tileSize)) * 150;
-        const playerY = (player.y / (map.height * tileSize)) * 150;
-        minimapCtx.fillStyle = '#e74c3c';
-        minimapCtx.fillRect(playerX - 2, playerY - 2, 4, 4);
-
-        minimapCtx.fillStyle = '#3498db';
-        Object.values(gameState.players).forEach(p => {
-            const x = (p.x / (map.width * tileSize)) * 150;
-            const y = (p.y / (map.height * tileSize)) * 150;
-            minimapCtx.fillRect(x - 2, y - 2, 4, 4);
-        });
-    }
 
     updateUI();
     requestAnimationFrame(gameLoop);

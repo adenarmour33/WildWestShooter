@@ -434,3 +434,57 @@
 .chat-text {
     color: #fff;
 }
+
+/* Leaderboard Styles */
+.leaderboard {
+    position: absolute;
+    top: 10px;
+    right: 170px; /* Position next to minimap */
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 8px;
+    padding: 10px;
+    min-width: 200px;
+    color: white;
+}
+
+.leaderboard-title {
+    font-size: 16px;
+    margin: 0 0 10px 0;
+    text-align: center;
+    color: #f1c40f;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.leaderboard-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px;
+    margin-bottom: 5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.leaderboard-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.leaderboard-rank {
+    color: #f1c40f;
+    font-weight: bold;
+    margin-right: 10px;
+}
+
+.leaderboard-username {
+    flex-grow: 1;
+    margin-right: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leaderboard-score {
+    font-weight: bold;
+    color: #2ecc71;
+}

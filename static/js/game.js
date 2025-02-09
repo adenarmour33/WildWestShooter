@@ -279,21 +279,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateScoreboard() {
-        if (!scoreboardElement) return;
+        const leaderboardContent = document.getElementById('leaderboard-content');
+        if (!leaderboardContent) return;
 
-        const scores = Object.entries(gameState.scores)
-            .sort(([,a], [,b]) => b - a)
-            .slice(0, 10);
+        // Get all players and their scores
+        const players = Object.entries(gameState.players)
+            .map(([id, player]) => ({
+                id,
+                username: player.username,
+                score: player.score || 0
+            }))
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 10); // Show top 10 players
 
-        scoreboardElement.innerHTML = `
-            <div class="scoreboard-header">Top Players</div>
-            ${scores.map(([id, score]) => `
-                <div class="scoreboard-row">
-                    <span class="player-name">${gameState.players[id]?.username || 'Unknown'}</span>
-                    <span class="player-score">${score}</span>
-                </div>
-            `).join('')}
-        `;
+        // Update leaderboard HTML
+        leaderboardContent.innerHTML = players.map((player, index) => `
+            <div class="leaderboard-item">
+                <span class="leaderboard-rank">#${index + 1}</span>
+                <span class="leaderboard-username">${player.username}</span>
+                <span class="leaderboard-score">${player.score}</span>
+            </div>
+        `).join('');
     }
 
     function updateUI() {
@@ -308,6 +314,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `${weapon.ammo}/${weapon.maxAmmo}` : '∞';
         }
 
+        // Update leaderboard
         updateScoreboard();
     }
 
@@ -758,11 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState.isAdmin = state.is_admin;
         gameState.isModerator = state.is_moderator;
 
-        // Create admin panel if admin and panel doesn't exist
-        if ((state.is_admin || state.is_moderator) && !adminPanel) {
-            createAdminPanel();
-        }
-
+        // Update UI to reflect new game state
         updateUI();
     });
 
@@ -787,7 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('player_kill', (data) => {
         player.kills++;
         player.score += 100; // Award points for a kill
-        updateUI();
+        updateUI(); // Update UI to show new score
     });
     socket.on('banned', (data) => {
         alert(`You have been banned: ${data.reason}`);

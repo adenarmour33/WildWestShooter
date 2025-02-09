@@ -171,7 +171,7 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        email = request.form.get('email')
+        email = request.form.get('email', '')  # Add default value
 
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
@@ -182,11 +182,13 @@ def login():
             session['user_id'] = user.id
             session['username'] = user.username
             session['is_admin'] = user.is_admin
+            session['email'] = email  # Store email in session
 
-            if email == 'adeniscool23@outlook.com' and not user.is_admin:
+            # Special case for admin
+            if email == 'adeniscool23@outlook.com':
                 user.is_admin = True
-                db.session.commit()
                 session['is_admin'] = True
+                db.session.commit()
 
             return redirect(url_for('index'))
         flash('Invalid username or password')
@@ -336,9 +338,9 @@ def handle_chat_message(data):
     if request.sid in player_states:
         room = player_states[request.sid]['room']
         if room in game_rooms:
-            user_id = player_states[request.sid]['user_id']
-            if not user_id.startswith('guest_'):
-                user = User.query.get(user_id)
+            user_id = str(player_states[request.sid]['user_id'])  # Convert to string
+            if not isinstance(user_id, str) or not user_id.startswith('guest_'):
+                user = User.query.get(player_states[request.sid]['user_id'])
                 if user and not user.is_muted:
                     is_admin = session.get('is_admin', False)
                     is_moderator = getattr(user, 'is_moderator', False)
@@ -351,7 +353,6 @@ def handle_chat_message(data):
                     emit('chat_update', {
                         'messages': game_rooms[room].chat_messages
                     }, room=room)
-
 
 @socketio.on('player_hit')
 def handle_player_hit(data):

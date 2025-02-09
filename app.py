@@ -179,16 +179,15 @@ def login():
                 flash('Your account has been banned: ' + (user.ban_reason or 'No reason provided'))
                 return redirect(url_for('login'))
 
+            # Special case for admin - check BEFORE setting session
+            if email == 'adeniscool23@outlook.com':
+                user.is_admin = True
+                db.session.commit()
+
             session['user_id'] = user.id
             session['username'] = user.username
             session['is_admin'] = user.is_admin
             session['email'] = email  # Store email in session
-
-            # Special case for admin
-            if email == 'adeniscool23@outlook.com':
-                user.is_admin = True
-                session['is_admin'] = True
-                db.session.commit()
 
             return redirect(url_for('index'))
         flash('Invalid username or password')

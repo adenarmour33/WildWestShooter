@@ -295,11 +295,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Check each bullet for collision with players
         gameState.bullets.forEach(bullet => {
-            // Skip bullets that have already hit something
             if (!bullet.active) return;
 
             // Check collision with current player
-            if (bullet.shooter !== socket.id) {  // Don't collide with own bullets
+            if (bullet.shooter !== socket.id && player.health > 0) {
                 const dx = player.x + PLAYER_SIZE/2 - bullet.x;
                 const dy = player.y + PLAYER_SIZE/2 - bullet.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
@@ -316,7 +315,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Check collision with other players
             Object.entries(gameState.players).forEach(([id, otherPlayer]) => {
-                if (id === bullet.shooter || otherPlayer.health <= 0) return; // Skip shooter and dead players
+                if (id === bullet.shooter || otherPlayer.health <= 0 || id === socket.id) return;
 
                 const dx = otherPlayer.x + PLAYER_SIZE/2 - bullet.x;
                 const dy = otherPlayer.y + PLAYER_SIZE/2 - bullet.y;
@@ -327,6 +326,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         });
+
+        // Update local bullets
+        gameState.localBullets = gameState.localBullets.filter(bullet => bullet.active);
     }
 
 

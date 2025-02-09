@@ -34,16 +34,41 @@ class GameRoom:
     def __init__(self):
         self.players = {}
         self.bullets = []
-        self.items = []
-        self.zone = {
-            'radius': 1000,
-            'target_radius': 500,
-            'shrink_rate': 0.2,
-            'damage': 1
-        }
-        self.started_at = datetime.utcnow()
+        self.countdown_started = False
+        self.min_players = 2
+        self.max_players = 10
+        self.bot_names = [
+            "Desperado", "Gunslinger", "Ranger", "Sheriff", "Bounty Hunter",
+            "Marshal", "Outlaw", "Bandit", "Renegade", "Maverick"
+        ]
+        self.started = False
+        self.countdown_time = 30  # 30 seconds countdown
 
-game_rooms = {'main': {'players': {}, 'bullets': []}} #Initialized to avoid KeyError
+    def add_bot(self):
+        if len(self.players) >= self.max_players:
+            return False
+
+        bot_id = f"bot_{len([p for p in self.players.values() if p.get('is_bot', False)])}"
+        bot_name = self.bot_names[len([p for p in self.players.values() if p.get('is_bot', False)]) % len(self.bot_names)]
+
+        self.players[bot_id] = {
+            'username': bot_name,
+            'x': random.randint(100, 900),
+            'y': random.randint(100, 900),
+            'rotation': 0,
+            'health': 100,
+            'weapon': 'pistol',
+            'is_bot': True
+        }
+        return True
+
+    def should_start_countdown(self):
+        return len(self.players) >= self.min_players and not self.countdown_started
+
+    def should_add_bots(self):
+        return len(self.players) < self.min_players
+
+game_rooms = {}
 player_states = {}
 
 @app.route('/')
@@ -86,6 +111,12 @@ def register():
     flash('Registration successful')
     return redirect(url_for('login'))
 
+@app.route('/lobby')
+def lobby():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    return render_template('lobby.html')
+
 @app.route('/game')
 def game():
     if 'user_id' not in session:
@@ -107,6 +138,9 @@ def handle_connect():
     room = 'main'
     join_room(room)
 
+    if room not in game_rooms:
+        game_rooms[room] = GameRoom()
+
     # Initialize player state
     player_states[request.sid] = {
         'user_id': session['user_id'],
@@ -117,38 +151,59 @@ def handle_connect():
         'health': 100,
         'score': 0,
         'weapon': 'pistol',
-        'room': room
+        'room': room,
+        'is_bot': False
     }
 
     # Add player to game room
-    if room not in game_rooms:
-        game_rooms[room] = {
-            'players': {},
-            'bullets': []
-        }
-
-    game_rooms[room]['players'][request.sid] = {
+    game_rooms[room].players[request.sid] = {
+        'username': session['username'],
         'x': player_states[request.sid]['x'],
         'y': player_states[request.sid]['y'],
         'rotation': 0,
         'health': 100,
         'weapon': 'pistol',
-        'username': session['username']
+        'is_bot': False
     }
 
-    # Emit initial game state to the new player
-    emit('game_state', game_rooms[room])
-    # Notify other players
-    emit('player_joined', {'username': session['username']}, room=room)
+    # Check if we should start countdown
+    if game_rooms[room].should_start_countdown():
+        game_rooms[room].countdown_started = True
+        socketio.emit('lobby_update', {
+            'players': [{'username': p['username'], 'isBot': p.get('is_bot', False)} 
+                       for p in game_rooms[room].players.values()],
+            'countdown_started': True
+        }, room=room)
+
+        # Start game after countdown
+        socketio.sleep(game_rooms[room].countdown_time)
+        game_rooms[room].started = True
+        socketio.emit('game_starting', room=room)
+    elif game_rooms[room].should_add_bots():
+        # Add bots until minimum player count is reached
+        while len(game_rooms[room].players) < game_rooms[room].min_players:
+            if game_rooms[room].add_bot():
+                socketio.emit('bot_added', {
+                    'players': [{'username': p['username'], 'isBot': p.get('is_bot', False)} 
+                               for p in game_rooms[room].players.values()]
+                }, room=room)
+            socketio.sleep(1)  # Add delay between bot additions
+
+    # Emit initial game state
+    emit('lobby_update', {
+        'players': [{'username': p['username'], 'isBot': p.get('is_bot', False)} 
+                   for p in game_rooms[room].players.values()],
+        'countdown_started': game_rooms[room].countdown_started
+    }, room=room)
 
 @socketio.on('disconnect')
 def handle_disconnect():
     if request.sid in player_states:
         room = player_states[request.sid]['room']
         if room in game_rooms:
-            if request.sid in game_rooms[room]['players']:
-                del game_rooms[room]['players'][request.sid]
-            emit('game_state', game_rooms[room], room=room)
+            if request.sid in game_rooms[room].players:
+                del game_rooms[room].players[request.sid]
+            emit('game_state', {'players': game_rooms[room].players, 'bullets': game_rooms[room].bullets}, room=room)
             emit('player_left', {'username': player_states[request.sid]['username']}, room=room)
         del player_states[request.sid]
 
@@ -157,15 +212,16 @@ def handle_player_update(data):
     if request.sid in player_states:
         room = player_states[request.sid]['room']
         if room in game_rooms:
-            game_rooms[room]['players'][request.sid] = {
+            game_rooms[room].players[request.sid] = {
                 'x': data['x'],
                 'y': data['y'],
                 'rotation': data['rotation'],
                 'health': data['health'],
                 'weapon': data['weapon'],
-                'username': player_states[request.sid]['username']
+                'username': player_states[request.sid]['username'],
+                'is_bot': player_states[request.sid]['is_bot']
             }
-            emit('game_state', game_rooms[room], room=room)
+            emit('game_state', {'players': game_rooms[room].players, 'bullets': game_rooms[room].bullets}, room=room)
 
 @socketio.on('player_shoot')
 def handle_player_shoot(data):
@@ -180,8 +236,8 @@ def handle_player_shoot(data):
                 'weapon': data['weapon'],
                 'shooter': request.sid
             }
-            game_rooms[room]['bullets'].append(bullet)
-            emit('game_state', game_rooms[room], room=room)
+            game_rooms[room].bullets.append(bullet)
+            emit('game_state', {'players': game_rooms[room].players, 'bullets': game_rooms[room].bullets}, room=room)
 
 @socketio.on('player_melee')
 def handle_player_melee(data):
@@ -190,7 +246,7 @@ def handle_player_melee(data):
         attacker_pos = (data['x'], data['y'])
 
         # Check for hits on other players
-        for player_id, player in game_rooms[room]['players'].items():
+        for player_id, player in game_rooms[room].players.items():
             if player_id != request.sid:
                 target_pos = (player['x'], player['y'])
                 distance = math.hypot(target_pos[0] - attacker_pos[0],
@@ -228,10 +284,10 @@ def handle_player_died():
 
         # Remove player from game
         if room in game_rooms:
-            if request.sid in game_rooms[room]['players']:
-                del game_rooms[room]['players'][request.sid]
+            if request.sid in game_rooms[room].players:
+                del game_rooms[room].players[request.sid]
 
-        emit('game_state', game_rooms[room], room=room)
+        emit('game_state', {'players': game_rooms[room].players, 'bullets': game_rooms[room].bullets}, room=room)
 
 with app.app_context():
     db.create_all()

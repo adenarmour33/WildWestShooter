@@ -1,5 +1,30 @@
 // Game setup
 let canvas, ctx, socket;
+let tileSize = 32;
+let assets = {
+    tiles: {
+        grass: new Image(),
+        sand: new Image(),
+        tree: new Image()
+    },
+    player: new Image(),
+    weapons: {
+        pistol: new Image(),
+        shotgun: new Image(),
+        smg: new Image(),
+        knife: new Image()
+    }
+};
+
+// Load assets
+assets.tiles.grass.src = '/static/assets/tiles/grass.png';
+assets.tiles.sand.src = '/static/assets/tiles/sand.png';
+assets.tiles.tree.src = '/static/assets/tiles/tree.png';
+assets.player.src = '/static/assets/player.png';
+assets.weapons.pistol.src = '/static/assets/weapons/pistol.png';
+assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.png';
+assets.weapons.smg.src = '/static/assets/weapons/smg.png';
+assets.weapons.knife.src = '/static/assets/weapons/knife.png';
 
 // Initialize game after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -23,22 +48,100 @@ document.addEventListener('DOMContentLoaded', () => {
         knife: { damage: 35, fireRate: 500, range: 50 }
     };
 
+    // Add bullet class definition after WEAPONS constant
+    class Bullet {
+        constructor(x, y, angle, speed, damage, weapon, shooter) {
+            this.x = x;
+            this.y = y;
+            this.angle = angle;
+            this.speed = speed;
+            this.damage = damage;
+            this.weapon = weapon;
+            this.shooter = shooter;
+            this.lifetime = 2000; // 2 seconds lifetime
+            this.spawnTime = Date.now();
+            this.active = true;
+        }
+
+        update() {
+            // Move bullet
+            this.x += Math.cos(this.angle) * this.speed;
+            this.y += Math.sin(this.angle) * this.speed;
+
+            // Check lifetime
+            if (Date.now() - this.spawnTime > this.lifetime) {
+                this.active = false;
+            }
+        }
+    }
+
+    // Map configuration
+    const map = {
+        width: 50,
+        height: 50,
+        tiles: [],
+        generateTiles: function() {
+            for (let y = 0; y < this.height; y++) {
+                this.tiles[y] = [];
+                for (let x = 0; x < this.width; x++) {
+                    // Create a natural-looking terrain
+                    let noise = Math.random();
+                    if (noise < 0.7) {
+                        this.tiles[y][x] = 'grass';
+                    } else if (noise < 0.85) {
+                        this.tiles[y][x] = 'sand';
+                    } else {
+                        this.tiles[y][x] = 'tree';
+                    }
+                }
+            }
+        }
+    };
+    map.generateTiles();
+
     // Game state
     let player = {
-        x: 0,
-        y: 0,
+        x: Math.random() * (map.width * tileSize - PLAYER_SIZE),
+        y: Math.random() * (map.height * tileSize - PLAYER_SIZE),
         velX: 0,
         velY: 0,
         rotation: 0,
         health: 100,
         score: 0,
         currentWeapon: 'pistol',
-        lastShot: 0
+        lastShot: 0,
+        sprite: {
+            width: 32,
+            height: 32,
+            frameX: 0,
+            frameY: 0,
+            animationSpeed: 0.15,
+            animationTimer: 0
+        }
     };
 
+    // Camera
+    let camera = {
+        x: 0,
+        y: 0,
+        width: canvas.width,
+        height: canvas.height,
+        update: function() {
+            // Center camera on player
+            this.x = player.x - canvas.width/2;
+            this.y = player.y - canvas.height/2;
+
+            // Clamp camera to map bounds
+            this.x = Math.max(0, Math.min(this.x, map.width * tileSize - canvas.width));
+            this.y = Math.max(0, Math.min(this.y, map.height * tileSize - canvas.height));
+        }
+    };
+
+    // Modify gameState to include local bullets
     let gameState = {
         players: {},
-        bullets: []
+        bullets: [],
+        localBullets: [] // Add this line for client-side bullet tracking
     };
 
     // Mobile controls state
@@ -184,6 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Update the shoot function
     function shoot() {
         const now = Date.now();
         const weapon = WEAPONS[player.currentWeapon];
@@ -206,9 +310,23 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let i = 0; i < pellets; i++) {
                 const spread = (Math.random() - 0.5) * weapon.spread;
                 const angle = player.rotation + spread;
+
+                // Create local bullet
+                const bullet = new Bullet(
+                    player.x + PLAYER_SIZE/2 + Math.cos(angle) * PLAYER_SIZE,
+                    player.y + PLAYER_SIZE/2 + Math.sin(angle) * PLAYER_SIZE,
+                    angle,
+                    BULLET_SPEED,
+                    weapon.damage,
+                    player.currentWeapon,
+                    socket.id
+                );
+                gameState.localBullets.push(bullet);
+
+                // Emit to server
                 socket.emit('player_shoot', {
-                    x: player.x + Math.cos(angle) * PLAYER_SIZE,
-                    y: player.y + Math.sin(angle) * PLAYER_SIZE,
+                    x: bullet.x,
+                    y: bullet.y,
                     angle: angle,
                     damage: weapon.damage,
                     weapon: player.currentWeapon
@@ -241,20 +359,21 @@ document.addEventListener('DOMContentLoaded', () => {
         minimapCtx.fillRect(0, 0, 150, 150);
 
         // Draw player
-        const playerX = (player.x / canvas.width) * 150;
-        const playerY = (player.y / canvas.height) * 150;
+        const playerX = (player.x / (map.width * tileSize)) * 150;
+        const playerY = (player.y / (map.height * tileSize)) * 150;
         minimapCtx.fillStyle = '#e74c3c';
         minimapCtx.fillRect(playerX - 2, playerY - 2, 4, 4);
 
         // Draw other players
         minimapCtx.fillStyle = '#3498db';
         Object.values(gameState.players).forEach(p => {
-            const x = (p.x / canvas.width) * 150;
-            const y = (p.y / canvas.height) * 150;
+            const x = (p.x / (map.width * tileSize)) * 150;
+            const y = (p.y / (map.height * tileSize)) * 150;
             minimapCtx.fillRect(x - 2, y - 2, 4, 4);
         });
     }
 
+    // Update the update function to include bullet updates
     function update() {
         const moveSpeed = keys['shift'] ? PLAYER_SPEED * 1.5 : PLAYER_SPEED;
 
@@ -278,8 +397,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        player.x = Math.max(0, Math.min(canvas.width - PLAYER_SIZE, player.x + player.velX));
-        player.y = Math.max(0, Math.min(canvas.height - PLAYER_SIZE, player.y + player.velY));
+        player.x = Math.max(0, Math.min((map.width * tileSize) - PLAYER_SIZE, player.x + player.velX));
+        player.y = Math.max(0, Math.min((map.height * tileSize) - PLAYER_SIZE, player.y + player.velY));
+
+        // Update bullets
+        gameState.localBullets = gameState.localBullets.filter(bullet => {
+            bullet.update();
+            return bullet.active;
+        });
 
         socket.emit('player_update', {
             x: player.x,
@@ -292,44 +417,80 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMinimap();
     }
 
+    // Update the draw function's bullet rendering
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        // Update camera
+        camera.update();
+
+        // Draw map
+        const startCol = Math.floor(camera.x / tileSize);
+        const endCol = Math.min(map.width, startCol + Math.ceil(canvas.width / tileSize) + 1);
+        const startRow = Math.floor(camera.y / tileSize);
+        const endRow = Math.min(map.height, startRow + Math.ceil(canvas.height / tileSize) + 1);
+
+        for (let y = startRow; y < endRow; y++) {
+            for (let x = startCol; x < endCol; x++) {
+                const tile = map.tiles[y][x];
+                const screenX = x * tileSize - camera.x;
+                const screenY = y * tileSize - camera.y;
+
+                if (tile === 'grass') {
+                    ctx.drawImage(assets.tiles.grass, screenX, screenY, tileSize, tileSize);
+                } else if (tile === 'sand') {
+                    ctx.drawImage(assets.tiles.sand, screenX, screenY, tileSize, tileSize);
+                } else if (tile === 'tree') {
+                    ctx.drawImage(assets.tiles.tree, screenX, screenY, tileSize, tileSize);
+                }
+            }
+        }
+
         // Draw other players
         Object.values(gameState.players).forEach(p => {
+            const screenX = p.x - camera.x;
+            const screenY = p.y - camera.y;
+
             ctx.save();
-            ctx.translate(p.x + PLAYER_SIZE/2, p.y + PLAYER_SIZE/2);
+            ctx.translate(screenX + PLAYER_SIZE/2, screenY + PLAYER_SIZE/2);
             ctx.rotate(p.rotation);
-            ctx.fillStyle = '#3498db';
-            ctx.fillRect(-PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
-            ctx.fillStyle = '#2ecc71';
-            ctx.fillRect(0, -2, PLAYER_SIZE/2, 4);
+            ctx.drawImage(assets.player, 
+                         0, 0, 32, 32,
+                         -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
             ctx.restore();
 
             // Draw username
             ctx.fillStyle = '#ffffff';
             ctx.font = '12px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(p.username, p.x + PLAYER_SIZE/2, p.y - 10);
+            ctx.fillText(p.username, screenX + PLAYER_SIZE/2, screenY - 10);
         });
 
         // Draw player
         ctx.save();
-        ctx.translate(player.x + PLAYER_SIZE/2, player.y + PLAYER_SIZE/2);
+        ctx.translate(player.x - camera.x + PLAYER_SIZE/2, player.y - camera.y + PLAYER_SIZE/2);
         ctx.rotate(player.rotation);
-        ctx.fillStyle = '#e74c3c';
-        ctx.fillRect(-PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
-        ctx.fillStyle = '#f1c40f';
-        ctx.fillRect(0, -2, PLAYER_SIZE/2, 4);
+        ctx.drawImage(assets.player,
+                     player.sprite.frameX * player.sprite.width, 
+                     player.sprite.frameY * player.sprite.height,
+                     player.sprite.width, player.sprite.height,
+                     -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
         ctx.restore();
 
         // Draw bullets
-        gameState.bullets.forEach(bullet => {
+        const drawBullet = (bullet) => {
+            const screenX = bullet.x - camera.x;
+            const screenY = bullet.y - camera.y;
+
             ctx.fillStyle = '#f1c40f';
             ctx.beginPath();
-            ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
+            ctx.arc(screenX, screenY, 3, 0, Math.PI * 2);
             ctx.fill();
-        });
+        };
+
+        // Draw both local and server bullets
+        gameState.localBullets.forEach(drawBullet);
+        gameState.bullets.forEach(drawBullet);
     }
 
     function gameLoop() {
@@ -343,8 +504,12 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Connected to server');
     });
 
+    // Update socket event for game state
     socket.on('game_state', (state) => {
-        gameState = state;
+        gameState.players = state.players;
+        gameState.bullets = state.bullets.map(b => new Bullet(
+            b.x, b.y, b.angle, BULLET_SPEED, b.damage, b.weapon, b.shooter
+        ));
     });
 
     socket.on('player_hit', (data) => {

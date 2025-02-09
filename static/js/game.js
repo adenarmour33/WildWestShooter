@@ -76,13 +76,20 @@ function createAdminPanel() {
         return;
     }
 
+    // Remove any existing styles first
+    const existingStyle = document.querySelector('#admin-panel-styles');
+    if (existingStyle) {
+        existingStyle.remove();
+    }
+
     // Create and inject styles first
     const style = document.createElement('style');
+    style.id = 'admin-panel-styles';
     style.textContent = `
         .admin-toggle {
             position: fixed;
             top: 20px;
-            left: 20px;
+            left: 20px !important;
             width: 40px;
             height: 40px;
             background: rgba(0, 0, 0, 0.8);
@@ -113,7 +120,7 @@ function createAdminPanel() {
         }
 
         .admin-panel.active {
-            left: 20px;
+            left: 70px;
         }
     `;
     document.head.appendChild(style);
@@ -123,6 +130,8 @@ function createAdminPanel() {
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'admin-toggle';
     toggleBtn.innerHTML = '<span class="action-icon">⚙️</span>';
+    toggleBtn.style.left = '20px';
+    toggleBtn.style.right = 'auto';
     toggleBtn.addEventListener('click', function(e) {
         console.log('Toggle button clicked');
         e.preventDefault();
@@ -177,11 +186,6 @@ function createAdminPanel() {
 
     document.body.appendChild(adminPanel);
     console.log('Admin panel added to document');
-
-    // Start updating player list
-    setInterval(() => {
-        socket.emit('get_player_info');
-    }, 1000);
 }
 
 // Game setup

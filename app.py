@@ -1,10 +1,12 @@
 import os
+import math
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging
 import json
+from datetime import datetime
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -27,7 +29,20 @@ socketio = SocketIO(app)
 from models import User, GameSession, PlayerStats
 
 # Game state
-game_rooms = {}
+class GameRoom:
+    def __init__(self):
+        self.players = {}
+        self.bullets = []
+        self.items = []
+        self.zone = {
+            'radius': 1000,
+            'target_radius': 500,
+            'shrink_rate': 0.2,
+            'damage': 1
+        }
+        self.started_at = datetime.utcnow()
+
+game_rooms = {'main': GameRoom()}
 player_states = {}
 
 @app.route('/')
@@ -87,48 +102,169 @@ def logout():
 def handle_connect():
     if 'user_id' not in session:
         return False
+
+    room = 'main'
+    join_room(room)
+
     player_states[request.sid] = {
         'user_id': session['user_id'],
         'username': session['username'],
         'x': 100,
         'y': 100,
+        'rotation': 0,
         'health': 100,
-        'score': 0
+        'score': 0,
+        'weapon': 'pistol',
+        'room': room
     }
-    emit('player_list', list(player_states.values()))
+
+    # Create new game session
+    game_session = GameSession(
+        user_id=session['user_id'],
+        room_id=room,
+        started_at=datetime.utcnow()
+    )
+    db.session.add(game_session)
+    db.session.commit()
+
+    emit('game_state', {
+        'players': game_rooms[room].players,
+        'bullets': game_rooms[room].bullets,
+        'items': game_rooms[room].items,
+        'zone': game_rooms[room].zone
+    })
 
 @socketio.on('disconnect')
 def handle_disconnect():
     if request.sid in player_states:
-        # Update player stats before disconnecting
+        room = player_states[request.sid]['room']
+
+        # Update player stats
         user = User.query.get(session['user_id'])
         if user:
             stats = user.stats
             stats.games_played += 1
             stats.total_score += player_states[request.sid]['score']
-            db.session.commit()
 
+            # Update game session
+            game_session = GameSession.query.filter_by(
+                user_id=user.id,
+                is_active=True
+            ).first()
+
+            if game_session:
+                game_session.ended_at = datetime.utcnow()
+                game_session.score = player_states[request.sid]['score']
+                game_session.is_active = False
+                db.session.commit()
+
+        # Remove player from game state
+        if room in game_rooms:
+            if request.sid in game_rooms[room].players:
+                del game_rooms[room].players[request.sid]
+
+        leave_room(room)
         del player_states[request.sid]
-    emit('player_list', list(player_states.values()), broadcast=True)
 
-@socketio.on('player_move')
-def handle_player_move(data):
+        emit('game_state', {
+            'players': game_rooms[room].players,
+            'bullets': game_rooms[room].bullets,
+            'items': game_rooms[room].items,
+            'zone': game_rooms[room].zone
+        }, room=room)
+
+@socketio.on('player_update')
+def handle_player_update(data):
     if request.sid in player_states:
-        player_states[request.sid].update({
+        room = player_states[request.sid]['room']
+        game_rooms[room].players[request.sid] = {
             'x': data['x'],
-            'y': data['y']
-        })
-        emit('game_state', player_states, broadcast=True)
+            'y': data['y'],
+            'rotation': data['rotation'],
+            'health': data['health'],
+            'weapon': data['weapon'],
+            'username': player_states[request.sid]['username']
+        }
+        emit('game_state', {
+            'players': game_rooms[room].players,
+            'bullets': game_rooms[room].bullets,
+            'items': game_rooms[room].items,
+            'zone': game_rooms[room].zone
+        }, room=room)
 
 @socketio.on('player_shoot')
 def handle_player_shoot(data):
     if request.sid in player_states:
-        emit('bullet_fired', {
+        room = player_states[request.sid]['room']
+        game_rooms[room].bullets.append({
             'x': data['x'],
             'y': data['y'],
             'angle': data['angle'],
-            'shooter': player_states[request.sid]['username']
-        }, broadcast=True)
+            'damage': data['damage'],
+            'weapon': data['weapon'],
+            'shooter': request.sid
+        })
+        emit('game_state', {
+            'players': game_rooms[room].players,
+            'bullets': game_rooms[room].bullets,
+            'items': game_rooms[room].items,
+            'zone': game_rooms[room].zone
+        }, room=room)
+
+@socketio.on('player_melee')
+def handle_player_melee(data):
+    if request.sid in player_states:
+        room = player_states[request.sid]['room']
+        attacker_pos = (data['x'], data['y'])
+
+        # Check for hits on other players
+        for player_id, player in game_rooms[room].players.items():
+            if player_id != request.sid:
+                target_pos = (player['x'], player['y'])
+                distance = math.hypot(target_pos[0] - attacker_pos[0],
+                                   target_pos[1] - attacker_pos[1])
+
+                if distance <= data['range']:
+                    # Check if target is in front of attacker
+                    angle_to_target = math.atan2(target_pos[1] - attacker_pos[1],
+                                               target_pos[0] - attacker_pos[0])
+                    angle_diff = abs(angle_to_target - data['rotation'])
+                    if angle_diff <= math.pi / 4:  # 45-degree arc
+                        emit('player_hit', {
+                            'damage': data['damage'],
+                            'attacker': player_states[request.sid]['username']
+                        }, room=player_id)
+
+@socketio.on('player_died')
+def handle_player_died():
+    if request.sid in player_states:
+        room = player_states[request.sid]['room']
+
+        # Update stats
+        user = User.query.get(session['user_id'])
+        if user:
+            game_session = GameSession.query.filter_by(
+                user_id=user.id,
+                is_active=True
+            ).first()
+
+            if game_session:
+                game_session.ended_at = datetime.utcnow()
+                game_session.score = player_states[request.sid]['score']
+                game_session.is_active = False
+                db.session.commit()
+
+        # Remove player from game
+        if room in game_rooms:
+            if request.sid in game_rooms[room].players:
+                del game_rooms[room].players[request.sid]
+
+        emit('game_state', {
+            'players': game_rooms[room].players,
+            'bullets': game_rooms[room].bullets,
+            'items': game_rooms[room].items,
+            'zone': game_rooms[room].zone
+        }, room=room)
 
 with app.app_context():
     db.create_all()

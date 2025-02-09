@@ -3,13 +3,16 @@ class MenuManager {
     constructor() {
         this.initializeSettings();
         this.bindEventListeners();
+        this.initializeServerBrowser();
+        this.initializeCharacterPreview();
     }
 
     initializeSettings() {
         // Initialize settings with default values or load from localStorage
         this.settings = {
             soundVolume: localStorage.getItem('soundVolume') || 50,
-            musicVolume: localStorage.getItem('musicVolume') || 50
+            musicVolume: localStorage.getItem('musicVolume') || 50,
+            graphicsQuality: localStorage.getItem('graphicsQuality') || 'medium'
         };
 
         // Update UI to reflect current settings
@@ -17,9 +20,10 @@ class MenuManager {
     }
 
     bindEventListeners() {
-        // Settings sliders
-        const soundSlider = document.querySelector('input[type="range"]:nth-of-type(1)');
-        const musicSlider = document.querySelector('input[type="range"]:nth-of-type(2)');
+        // Settings controls
+        const soundSlider = document.getElementById('soundVolume');
+        const musicSlider = document.getElementById('musicVolume');
+        const graphicsSelect = document.getElementById('graphicsQuality');
 
         if (soundSlider) {
             soundSlider.addEventListener('input', (e) => {
@@ -33,18 +37,34 @@ class MenuManager {
             });
         }
 
-        // Modal events
-        const settingsModal = document.getElementById('settingsModal');
-        if (settingsModal) {
-            settingsModal.addEventListener('shown.bs.modal', () => {
-                this.updateSettingsUI();
-            });
-
-            settingsModal.addEventListener('hidden.bs.modal', () => {
-                this.saveSettings();
+        if (graphicsSelect) {
+            graphicsSelect.addEventListener('change', (e) => {
+                this.updateSetting('graphicsQuality', e.target.value);
             });
         }
 
+        // Modal events
+        const modals = ['settingsModal', 'playModal', 'customizeModal'];
+        modals.forEach(modalId => {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.addEventListener('shown.bs.modal', () => {
+                    if (modalId === 'settingsModal') {
+                        this.updateSettingsUI();
+                    } else if (modalId === 'customizeModal') {
+                        this.updateCharacterPreview();
+                    }
+                });
+            }
+        });
+
+        // Server browser refresh
+        const refreshButton = document.querySelector('.server-browser .btn-refresh');
+        if (refreshButton) {
+            refreshButton.addEventListener('click', () => {
+                this.refreshServerList();
+            });
+        }
         // Play button
         const playButton = document.querySelector('a[href*="game"]');
         if (playButton) {
@@ -60,21 +80,102 @@ class MenuManager {
     }
 
     updateSettingsUI() {
-        const soundSlider = document.querySelector('input[type="range"]:nth-of-type(1)');
-        const musicSlider = document.querySelector('input[type="range"]:nth-of-type(2)');
+        const soundSlider = document.getElementById('soundVolume');
+        const musicSlider = document.getElementById('musicVolume');
+        const graphicsSelect = document.getElementById('graphicsQuality');
 
-        if (soundSlider) {
-            soundSlider.value = this.settings.soundVolume;
-        }
-        if (musicSlider) {
-            musicSlider.value = this.settings.musicVolume;
-        }
+        if (soundSlider) soundSlider.value = this.settings.soundVolume;
+        if (musicSlider) musicSlider.value = this.settings.musicVolume;
+        if (graphicsSelect) graphicsSelect.value = this.settings.graphicsQuality;
     }
 
-    saveSettings() {
-        Object.entries(this.settings).forEach(([key, value]) => {
-            localStorage.setItem(key, value);
+    initializeServerBrowser() {
+        this.refreshServerList();
+        // Auto-refresh every 30 seconds
+        setInterval(() => this.refreshServerList(), 30000);
+    }
+
+    refreshServerList() {
+        const serverList = document.getElementById('serverList');
+        if (!serverList) return;
+
+        // Clear current list
+        serverList.innerHTML = '';
+
+        // Example server data - replace with actual server fetching
+        const servers = [
+            { name: 'US West #1', players: '24/50', ping: 45 },
+            { name: 'US East #1', players: '31/50', ping: 60 },
+            { name: 'Europe #1', players: '42/50', ping: 120 }
+        ];
+
+        servers.forEach(server => {
+            const serverItem = document.createElement('div');
+            serverItem.className = 'server-item';
+            serverItem.innerHTML = `
+                <div>
+                    <strong>${server.name}</strong>
+                    <span class="text-muted ms-2">${server.players}</span>
+                </div>
+                <div>
+                    <span class="badge bg-success">${server.ping}ms</span>
+                    <button class="btn btn-sm btn-primary ms-2">Join</button>
+                </div>
+            `;
+            serverList.appendChild(serverItem);
         });
+    }
+
+    initializeCharacterPreview() {
+        const canvas = document.getElementById('characterPreview');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        const skins = ['cowboy', 'sheriff', 'bandit', 'native'];
+        const skinSelector = document.getElementById('skinSelector');
+
+        skins.forEach(skin => {
+            const button = document.createElement('button');
+            button.className = 'btn btn-outline-primary';
+            button.textContent = skin.charAt(0).toUpperCase() + skin.slice(1);
+            button.onclick = () => this.selectSkin(skin);
+            skinSelector.appendChild(button);
+        });
+
+        // Draw initial character
+        this.drawCharacter(ctx, 'cowboy');
+    }
+
+    selectSkin(skin) {
+        const canvas = document.getElementById('characterPreview');
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        this.drawCharacter(ctx, skin);
+        localStorage.setItem('selectedSkin', skin);
+    }
+
+    drawCharacter(ctx, skin) {
+        // Clear canvas
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+        // Draw character placeholder
+        ctx.fillStyle = '#666';
+        ctx.fillRect(50, 50, 100, 100);
+
+        // Draw some details based on skin
+        ctx.fillStyle = this.getSkinColor(skin);
+        ctx.fillRect(60, 60, 80, 80);
+    }
+
+    getSkinColor(skin) {
+        const colors = {
+            cowboy: '#8B4513',
+            sheriff: '#DAA520',
+            bandit: '#696969',
+            native: '#CD853F'
+        };
+        return colors[skin] || '#8B4513';
     }
 
     handlePlayClick(e) {
@@ -139,7 +240,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Add any required CSS dynamically
+// Party system
+function createParty() {
+    const partyCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    alert(`Party Created! Share this code with friends: ${partyCode}`);
+    // Here you would normally send this to the server and redirect to a party lobby
+}
+
+// Add loading overlay style
 const style = document.createElement('style');
 style.textContent = `
     .loading-overlay {
@@ -156,7 +264,6 @@ style.textContent = `
         color: white;
         z-index: 9999;
     }
-
     .btn {
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }

@@ -2,22 +2,104 @@
 
 {% block content %}
 <div class="text-center">
-    <h1 class="mb-4">Wild West Shooter</h1>
+    <h1 class="display-4 mb-4">Wild West Shooter</h1>
     <div class="row justify-content-center">
-        <div class="col-md-6">
+        <div class="col-md-8 col-lg-6">
             <div class="card bg-dark">
                 <div class="card-body">
-                    <h5 class="card-title">Main Menu</h5>
-                    <a href="{{ url_for('game') }}" class="btn btn-primary btn-lg mb-3 w-100">Play Game</a>
-                    <button class="btn btn-secondary btn-lg mb-3 w-100" data-bs-toggle="modal" data-bs-target="#settingsModal">Settings</button>
-                    <div class="card mt-3">
-                        <div class="card-body">
-                            <h6>Controls:</h6>
-                            <ul class="list-unstyled">
-                                <li>WASD - Move</li>
-                                <li>Space - Jump</li>
-                                <li>Left Click - Shoot</li>
-                            </ul>
+                    <div class="game-modes mb-4">
+                        <h5 class="card-title mb-3">Game Modes</h5>
+                        <button class="btn btn-primary btn-lg mb-3 w-100" data-bs-toggle="modal" data-bs-target="#playModal">
+                            Play Game
+                        </button>
+                        <button class="btn btn-secondary btn-lg mb-3 w-100" data-bs-toggle="modal" data-bs-target="#customizeModal">
+                            Customize Character
+                        </button>
+                        <button class="btn btn-secondary btn-lg mb-3 w-100" data-bs-toggle="modal" data-bs-target="#settingsModal">
+                            Settings
+                        </button>
+                    </div>
+
+                    <div class="stats-overview">
+                        <h6>Your Stats</h6>
+                        <div class="stats-grid">
+                            <div class="stat-item">
+                                <span class="stat-label">Games Played</span>
+                                <span class="stat-value">{{ stats.games_played if stats else 0 }}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Wins</span>
+                                <span class="stat-value">{{ stats.wins if stats else 0 }}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Kills</span>
+                                <span class="stat-value">{{ stats.total_kills if stats else 0 }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Play Game Modal -->
+<div class="modal fade" id="playModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Play Game</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card bg-dark h-100">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Solo Battle Royale</h5>
+                                <p class="card-text">Fight against other players in a battle royale!</p>
+                                <a href="{{ url_for('game') }}?mode=solo" class="btn btn-primary w-100">Play Solo</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card bg-dark h-100">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Squad Mode</h5>
+                                <p class="card-text">Team up with friends in squad battles!</p>
+                                <button class="btn btn-primary w-100" onclick="createParty()">Create Party</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="server-browser mt-4">
+                    <h6>Available Servers</h6>
+                    <div class="server-list" id="serverList">
+                        <!-- Servers will be populated dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Customize Character Modal -->
+<div class="modal fade" id="customizeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Customize Character</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="character-preview mb-4 text-center">
+                    <canvas id="characterPreview" width="200" height="200"></canvas>
+                </div>
+                <div class="customization-options">
+                    <div class="mb-3">
+                        <label class="form-label">Character Skin</label>
+                        <div class="d-flex flex-wrap gap-2" id="skinSelector">
+                            <!-- Skin options will be added dynamically -->
                         </div>
                     </div>
                 </div>
@@ -37,14 +119,47 @@
             <div class="modal-body">
                 <div class="mb-3">
                     <label class="form-label">Sound Volume</label>
-                    <input type="range" class="form-range" min="0" max="100" value="50">
+                    <input type="range" class="form-range" min="0" max="100" value="50" id="soundVolume">
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Music Volume</label>
-                    <input type="range" class="form-range" min="0" max="100" value="50">
+                    <input type="range" class="form-range" min="0" max="100" value="50" id="musicVolume">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Graphics Quality</label>
+                    <select class="form-select" id="graphicsQuality">
+                        <option value="low">Low</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="high">High</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Controls</label>
+                    <div class="controls-list">
+                        <div class="control-item">
+                            <span>Movement</span>
+                            <span class="text-muted">WASD</span>
+                        </div>
+                        <div class="control-item">
+                            <span>Shoot</span>
+                            <span class="text-muted">Left Click</span>
+                        </div>
+                        <div class="control-item">
+                            <span>Sprint</span>
+                            <span class="text-muted">Shift</span>
+                        </div>
+                        <div class="control-item">
+                            <span>Change Weapon</span>
+                            <span class="text-muted">1-4</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/menu.js"></script>
 {% endblock %}

@@ -121,7 +121,12 @@ function createAdminPanel() {
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'admin-toggle';
     toggleBtn.innerHTML = '<span class="action-icon">⚙️</span>';
-    toggleBtn.onclick = toggleAdminPanel;
+    toggleBtn.addEventListener('click', function(e) {
+        console.log('Toggle button clicked');
+        e.preventDefault();
+        e.stopPropagation();
+        toggleAdminPanel();
+    });
     document.body.appendChild(toggleBtn);
     console.log('Toggle button created');
 

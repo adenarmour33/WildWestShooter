@@ -177,7 +177,7 @@ function createAdminPanel() {
             const button = document.createElement('button');
             button.textContent = btn.text;
             button.className = `btn ${btn.class} mb-2 w-100`;
-            button.onclick = () => executeAdminCommand(btn.command);
+            button.onclick = () => executeAdminCommand(btn.command, playerList.value);
             adminPanel.appendChild(button);
         });
     }
@@ -191,7 +191,7 @@ function createAdminPanel() {
         const button = document.createElement('button');
         button.textContent = btn.text;
         button.className = `btn ${btn.class} mb-2 w-100`;
-        button.onclick = () => executeAdminCommand(btn.command);
+        button.onclick = () => executeAdminCommand(btn.command, playerList.value);
         adminPanel.appendChild(button);
     });
 
@@ -754,24 +754,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('game_state', (state) => {
         console.log('Received game state:', state);
-        console.log('User ID:', state.user_id);
-        console.log('Admin IDs:', state.admin_ids);
 
-        gameState.players = state.players;
-        gameState.bullets = state.bullets;
-        gameState.scores = state.scores;
-        gameState.userId = state.user_id;
+        // Store all relevant state information
+        gameState.players = state.players || {};
+        gameState.bullets = state.bullets || [];
+        gameState.scores = state.scores || {};
 
-        // Update admin status based on user ID
-        if (state.admin_ids && Array.isArray(state.admin_ids)) {
-            gameState.adminIds = new Set(state.admin_ids);
-            gameState.isAdmin = gameState.adminIds.has(state.user_id);
+        // Important: Set user ID and admin status
+        if (state.user_id) {
+            console.log('Setting user ID:', state.user_id);
+            gameState.userId = state.user_id;
+
+            // Update admin status based on admin_ids array
+            if (state.admin_ids && Array.isArray(state.admin_ids)) {
+                gameState.adminIds = new Set(state.admin_ids);
+                gameState.isAdmin = gameState.adminIds.has(state.user_id);
+                console.log('Admin status updated:', gameState.isAdmin);
+                console.log('Admin IDs:', [...gameState.adminIds]);
+            }
+        } else {
+            console.warn('No user_id received in game state');
         }
 
-        console.log('Current user admin status:', gameState.isAdmin);
-        if (gameState.isAdmin || gameState.isModerator) {
+        // Create admin panel if user is admin
+        if (gameState.isAdmin) {
+            console.log('User is admin, creating admin panel');
             createAdminPanel();
         }
+
         updateUI();
     });
 
@@ -784,10 +794,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         playerList.innerHTML = '<option value="">Select Player</option>';
         data.players.forEach(player => {
-            if (player.id !== socket.id) {  // Don't include self
+            if (player.id !== gameState.userId) {  // Don't include self
                 const option = document.createElement('option');
                 option.value = player.id;
-                option.textContent = `${player.username} (HP: ${player.health})`;
+                option.textContent = `${player.username} (ID: ${player.id})`;
                 playerList.appendChild(option);
             }
         });
@@ -943,9 +953,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const [action, ...args] = cmd.split(' ');
         const targetId = args[0];  // First argument is now the player ID
 
+        console.log('Processing command:', action);
+        console.log('Current user ID:', gameState.userId);
+        console.log('Is admin:', gameState.isAdmin);
+        console.log('Admin IDs:', [...gameState.adminIds]);
+
         // First check permissions using user ID
         if (!gameState.userId) {
-            return 'Error: User ID not found';
+            console.error('User ID not found in gameState:', gameState);
+            return 'Error: User ID not found. Please try reconnecting.';
         }
 
         // Check admin status using ID
@@ -1089,9 +1105,15 @@ function processCommand(command) {
     const [action, ...args] = cmd.split(' ');
     const targetId = args[0];  // First argument is now the player ID
 
+    console.log('Processing command:', action);
+    console.log('Current user ID:', gameState.userId);
+    console.log('Is admin:', gameState.isAdmin);
+    console.log('Admin IDs:', [...gameState.adminIds]);
+
     // First check permissions using user ID
     if (!gameState.userId) {
-        return 'Error: User ID not found';
+        console.error('User ID not found in gameState:', gameState);
+        return 'Error: User ID not found. Please try reconnecting.';
     }
 
     // Check admin status using ID

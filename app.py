@@ -286,12 +286,13 @@ def handle_player_hit(data):
     if request.sid in player_states:
         room = player_states[request.sid]['room']
         if room in game_rooms:
-            player = game_rooms[room].players[request.sid]
+            target_id = data.get('target_id', request.sid)
+            target = game_rooms[room].players[target_id]
             damage = data.get('damage', 15)  # Default damage if not specified
-            player['health'] -= damage
+            target['health'] -= damage
 
-            if player['health'] <= 0:
-                # Handle player death
+            if target['health'] <= 0:
+                # Handle player/bot death
                 shooter = data.get('shooter')
                 if shooter and shooter in game_rooms[room].players:
                     # Update killer's score and kills
@@ -302,13 +303,13 @@ def handle_player_hit(data):
                     # Notify killer
                     emit('player_kill', {}, room=shooter)
 
-                # Respawn player
-                spawn = game_rooms[room].respawn_player(request.sid)
-                if spawn:
+                # Respawn player/bot
+                spawn = game_rooms[room].respawn_player(target_id)
+                if spawn and not target.get('is_bot', False):
                     emit('player_respawn', {
                         'x': spawn['x'],
                         'y': spawn['y']
-                    }, room=request.sid)
+                    }, room=target_id)
 
             # Emit updated game state to all players
             emit('game_state', {

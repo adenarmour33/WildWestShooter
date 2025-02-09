@@ -311,13 +311,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (distance < PLAYER_HITBOX) {
                     socket.emit('player_hit', {
                         damage: bullet.damage,
-                        shooter: bullet.shooter
+                        shooter: bullet.shooter,
+                        target_id: socket.id
                     });
                     return false;
                 }
             }
 
-            // Check collision with other players
+            // Check collision with other players and bots
             for (const [id, otherPlayer] of Object.entries(gameState.players)) {
                 if (id === bullet.shooter || otherPlayer.health <= 0 || id === socket.id) continue;
 
@@ -326,6 +327,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
                 if (distance < PLAYER_HITBOX) {
+                    socket.emit('player_hit', {
+                        damage: bullet.damage,
+                        shooter: bullet.shooter,
+                        target_id: id
+                    });
                     return false;
                 }
             }
@@ -339,6 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return bullet.active;
         });
     }
+
 
 
     function update(deltaTime) {

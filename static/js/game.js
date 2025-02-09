@@ -56,10 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
             this.lifetime = 2000; // 2 seconds lifetime
             this.spawnTime = Date.now();
             this.active = true;
-
-            // Set initial position offset from player
-            this.x += Math.cos(angle) * PLAYER_SIZE;
-            this.y += Math.sin(angle) * PLAYER_SIZE;
         }
 
         update() {
@@ -85,7 +81,6 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let y = 0; y < this.height; y++) {
                 this.tiles[y] = [];
                 for (let x = 0; x < this.width; x++) {
-                    // Create a natural-looking terrain
                     let noise = Math.random();
                     if (noise < 0.7) {
                         this.tiles[y][x] = 'grass';
@@ -109,15 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
         health: 100,
         score: 0,
         currentWeapon: 'pistol',
-        lastShot: 0,
-        sprite: {
-            width: 32,
-            height: 32,
-            frameX: 0,
-            frameY: 0,
-            animationSpeed: 0.15,
-            animationTimer: 0
-        }
+        lastShot: 0
     };
 
     let camera = {
@@ -126,11 +113,8 @@ document.addEventListener('DOMContentLoaded', () => {
         width: canvas.width,
         height: canvas.height,
         update: function() {
-            // Center camera on player
             this.x = player.x - canvas.width/2;
             this.y = player.y - canvas.height/2;
-
-            // Clamp camera to map bounds
             this.x = Math.max(0, Math.min(this.x, map.width * tileSize - canvas.width));
             this.y = Math.max(0, Math.min(this.y, map.height * tileSize - canvas.height));
         }
@@ -142,26 +126,17 @@ document.addEventListener('DOMContentLoaded', () => {
         localBullets: []
     };
 
-    let joystick = {
-        active: false,
-        baseX: 0,
-        baseY: 0,
-        stickX: 0,
-        stickY: 0,
-        deltaX: 0,
-        deltaY: 0,
-        base: document.querySelector('.joystick-base'),
-        stick: document.querySelector('.joystick-stick')
-    };
-
+    // UI elements
     const healthBar = document.querySelector('.health-fill');
     const healthText = document.querySelector('.health-text');
     const ammoCounter = document.getElementById('ammoCounter');
+    const weaponSlots = document.querySelectorAll('.weapon-slot');
     const joystickContainer = document.querySelector('.joystick-container');
     const shootButton = document.getElementById('shootButton');
     const reloadButton = document.getElementById('reloadButton');
     const minimap = document.getElementById('minimap');
     const minimapCtx = minimap ? minimap.getContext('2d') : null;
+
 
     function resizeCanvas() {
         canvas.width = window.innerWidth;
@@ -172,8 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
     resizeCanvas();
 
     const keys = {};
-    let mouseX = 0;
-    let mouseY = 0;
+    let mouseX = 0, mouseY = 0;
 
     document.addEventListener('keydown', (e) => {
         keys[e.key.toLowerCase()] = true;
@@ -192,8 +166,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     canvas.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
-        mouseX = e.clientX - rect.left;
-        mouseY = e.clientY - rect.top;
+        mouseX = e.clientX - rect.left + camera.x;
+        mouseY = e.clientY - rect.top + camera.y;
         updateRotation();
     });
 
@@ -256,14 +230,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateRotation() {
-        player.rotation = Math.atan2(mouseY - (player.y + PLAYER_SIZE/2), 
-                                   mouseX - (player.x + PLAYER_SIZE/2));
+        const dx = mouseX - (player.x + PLAYER_SIZE/2);
+        const dy = mouseY - (player.y + PLAYER_SIZE/2);
+        player.rotation = Math.atan2(dy, dx);
     }
 
     function switchWeapon(weapon) {
         if (WEAPONS[weapon]) {
             player.currentWeapon = weapon;
-            document.querySelectorAll('.weapon-slot').forEach((slot, index) => {
+            weaponSlots.forEach((slot, index) => {
                 slot.classList.toggle('active', index === ['pistol', 'shotgun', 'smg', 'knife'].indexOf(weapon));
             });
             updateUI();
@@ -301,9 +276,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const spread = (Math.random() - 0.5) * weapon.spread;
                 const angle = player.rotation + spread;
 
+                // Create bullet with offset from player center
+                const bulletX = player.x + PLAYER_SIZE/2 + Math.cos(angle) * PLAYER_SIZE;
+                const bulletY = player.y + PLAYER_SIZE/2 + Math.sin(angle) * PLAYER_SIZE;
+
                 const bullet = new Bullet(
-                    player.x + PLAYER_SIZE/2,
-                    player.y + PLAYER_SIZE/2,
+                    bulletX,
+                    bulletY,
                     angle,
                     BULLET_SPEED,
                     weapon.damage,
@@ -313,8 +292,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 gameState.localBullets.push(bullet);
 
                 socket.emit('player_shoot', {
-                    x: bullet.x,
-                    y: bullet.y,
+                    x: bulletX,
+                    y: bulletY,
                     angle: angle,
                     damage: weapon.damage,
                     weapon: player.currentWeapon
@@ -337,55 +316,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function updateMinimap() {
-        if (!minimapCtx) return;
-
-        minimapCtx.clearRect(0, 0, 150, 150);
-
-        // Draw map boundary
-        minimapCtx.fillStyle = 'rgba(0, 255, 0, 0.1)';
-        minimapCtx.fillRect(0, 0, 150, 150);
-
-        // Draw player
-        const playerX = (player.x / (map.width * tileSize)) * 150;
-        const playerY = (player.y / (map.height * tileSize)) * 150;
-        minimapCtx.fillStyle = '#e74c3c';
-        minimapCtx.fillRect(playerX - 2, playerY - 2, 4, 4);
-
-        // Draw other players
-        minimapCtx.fillStyle = '#3498db';
-        Object.values(gameState.players).forEach(p => {
-            const x = (p.x / (map.width * tileSize)) * 150;
-            const y = (p.y / (map.height * tileSize)) * 150;
-            minimapCtx.fillRect(x - 2, y - 2, 4, 4);
-        });
-    }
-
     function update() {
-        const moveSpeed = keys['shift'] ? PLAYER_SPEED * 1.5 : PLAYER_SPEED;
+        // Update player movement
+        player.velX = 0;
+        player.velY = 0;
 
-        if (joystick.active) {
-            const magnitude = Math.hypot(joystick.deltaX, joystick.deltaY);
-            const normalizedSpeed = moveSpeed * (magnitude / 60);
-            player.velX = (joystick.deltaX / magnitude) * normalizedSpeed;
-            player.velY = (joystick.deltaY / magnitude) * normalizedSpeed;
-        } else {
-            if (keys['w']) player.velY = -moveSpeed;
-            else if (keys['s']) player.velY = moveSpeed;
-            else player.velY = 0;
+        if (keys['w']) player.velY = -PLAYER_SPEED;
+        if (keys['s']) player.velY = PLAYER_SPEED;
+        if (keys['a']) player.velX = -PLAYER_SPEED;
+        if (keys['d']) player.velX = PLAYER_SPEED;
 
-            if (keys['a']) player.velX = -moveSpeed;
-            else if (keys['d']) player.velX = moveSpeed;
-            else player.velX = 0;
-
-            if (player.velX !== 0 && player.velY !== 0) {
-                player.velX *= 0.707;
-                player.velY *= 0.707;
-            }
+        // Normalize diagonal movement
+        if (player.velX !== 0 && player.velY !== 0) {
+            player.velX *= 0.707;
+            player.velY *= 0.707;
         }
 
-        player.x = Math.max(0, Math.min((map.width * tileSize) - PLAYER_SIZE, player.x + player.velX));
-        player.y = Math.max(0, Math.min((map.height * tileSize) - PLAYER_SIZE, player.y + player.velY));
+        // Update player position
+        player.x = Math.max(0, Math.min(map.width * tileSize - PLAYER_SIZE, player.x + player.velX));
+        player.y = Math.max(0, Math.min(map.height * tileSize - PLAYER_SIZE, player.y + player.velY));
 
         // Update bullets
         gameState.localBullets = gameState.localBullets.filter(bullet => {
@@ -393,6 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return bullet.active;
         });
 
+        // Send player update to server
         socket.emit('player_update', {
             x: player.x,
             y: player.y,
@@ -400,7 +350,6 @@ document.addEventListener('DOMContentLoaded', () => {
             health: player.health,
             weapon: player.currentWeapon
         });
-
         updateMinimap();
     }
 
@@ -408,7 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         camera.update();
 
-        // Draw map
+        // Draw map tiles
         const startCol = Math.floor(camera.x / tileSize);
         const endCol = Math.min(map.width, startCol + Math.ceil(canvas.width / tileSize) + 1);
         const startRow = Math.floor(camera.y / tileSize);
@@ -420,20 +369,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 const screenX = x * tileSize - camera.x;
                 const screenY = y * tileSize - camera.y;
 
-                if (tile === 'grass') {
-                    ctx.drawImage(assets.tiles.grass, screenX, screenY, tileSize, tileSize);
-                } else if (tile === 'sand') {
-                    ctx.drawImage(assets.tiles.sand, screenX, screenY, tileSize, tileSize);
-                } else if (tile === 'tree') {
-                    ctx.drawImage(assets.tiles.tree, screenX, screenY, tileSize, tileSize);
+                if (assets.tiles[tile] && assets.tiles[tile].complete) {
+                    ctx.drawImage(assets.tiles[tile], screenX, screenY, tileSize, tileSize);
                 }
             }
         }
 
         // Draw bullets
-        const drawBullet = (bullet) => {
+        function drawBullet(bullet) {
             if (!bullet.active) return;
-
             const screenX = bullet.x - camera.x;
             const screenY = bullet.y - camera.y;
 
@@ -441,9 +385,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.beginPath();
             ctx.arc(screenX, screenY, 3, 0, Math.PI * 2);
             ctx.fill();
-        };
+        }
 
-        // Draw both local and server bullets
         gameState.localBullets.forEach(drawBullet);
         gameState.bullets.forEach(drawBullet);
 
@@ -452,11 +395,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const screenX = p.x - camera.x;
             const screenY = p.y - camera.y;
 
-            ctx.save();
-            ctx.translate(screenX + PLAYER_SIZE/2, screenY + PLAYER_SIZE/2);
-            ctx.rotate(p.rotation);
-            ctx.drawImage(assets.player, -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
-            ctx.restore();
+            if (assets.player.complete) {
+                ctx.save();
+                ctx.translate(screenX + PLAYER_SIZE/2, screenY + PLAYER_SIZE/2);
+                ctx.rotate(p.rotation);
+                ctx.drawImage(assets.player, -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
+                ctx.restore();
+            }
 
             ctx.fillStyle = '#ffffff';
             ctx.font = '12px Arial';
@@ -465,11 +410,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // Draw player
-        ctx.save();
-        ctx.translate(player.x - camera.x + PLAYER_SIZE/2, player.y - camera.y + PLAYER_SIZE/2);
-        ctx.rotate(player.rotation);
-        ctx.drawImage(assets.player, -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
-        ctx.restore();
+        if (assets.player.complete) {
+            ctx.save();
+            ctx.translate(player.x - camera.x + PLAYER_SIZE/2, player.y - camera.y + PLAYER_SIZE/2);
+            ctx.rotate(player.rotation);
+            ctx.drawImage(assets.player, -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
+            ctx.restore();
+        }
     }
 
     function gameLoop() {
@@ -497,7 +444,6 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.emit('player_died');
         }
     });
-
     socket.on('player_joined', (data) => {
         console.log(`${data.username} joined the game`);
     });
@@ -506,6 +452,29 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`${data.username} left the game`);
     });
 
+    function updateMinimap() {
+        if (!minimapCtx) return;
+
+        minimapCtx.clearRect(0, 0, 150, 150);
+
+        // Draw map boundary
+        minimapCtx.fillStyle = 'rgba(0, 255, 0, 0.1)';
+        minimapCtx.fillRect(0, 0, 150, 150);
+
+        // Draw player
+        const playerX = (player.x / (map.width * tileSize)) * 150;
+        const playerY = (player.y / (map.height * tileSize)) * 150;
+        minimapCtx.fillStyle = '#e74c3c';
+        minimapCtx.fillRect(playerX - 2, playerY - 2, 4, 4);
+
+        // Draw other players
+        minimapCtx.fillStyle = '#3498db';
+        Object.values(gameState.players).forEach(p => {
+            const x = (p.x / (map.width * tileSize)) * 150;
+            const y = (p.y / (map.height * tileSize)) * 150;
+            minimapCtx.fillRect(x - 2, y - 2, 4, 4);
+        });
+    }
 
     updateUI();
     gameLoop();

@@ -897,7 +897,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter' && cmdInput.value.trim()) {
             const result = processCommand(cmdInput.value.trim());
             // Create a temporary message element to show the command result
-            const resultElement = document.createElement('div);
+            const resultElement = document.createElement('div');
             resultElement.style.cssText = `
                 position: fixed;
                 top: 50%;
@@ -911,11 +911,7 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             resultElement.textContent = result;
             document.body.appendChild(resultElement);
-
-            // Remove the result message after 3 seconds
-            setTimeout(() => {
-                document.body.removeChild(resultElement);
-            }, 3000);
+            setTimeout(() => document.body.removeChild(resultElement), 3000);
 
             cmdInput.value = '';
             cmdContainer.style.display = 'none';

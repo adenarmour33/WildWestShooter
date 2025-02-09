@@ -130,7 +130,18 @@ class GameRoom:
             # Keep bots within map bounds (assuming 1000x1000 map)
             bot['x'] = max(0, min(bot['x'], 1000))
             bot['y'] = max(0, min(bot['y'], 1000))
+
+            # Update bot's rotation to match movement direction
             bot['rotation'] = bot['move_direction']
+
+            # Avoid obstacles (simple collision avoidance)
+            for other_id, other in self.players.items():
+                if other_id != bot_id and other.get('health', 0) > 0:
+                    dx = other['x'] - bot['x']
+                    dy = other['y'] - bot['y']
+                    distance = math.sqrt(dx * dx + dy * dy)
+                    if distance < 100:  # If too close to another player
+                        bot['move_direction'] = (bot['move_direction'] + math.pi) % (2 * math.pi)  # Turn around
 
         # Clean up old bullets and handle collisions
         current_time = now.timestamp()

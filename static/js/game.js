@@ -370,6 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
+
     function update(deltaTime) {
         if (player.health <= 0) return;
 

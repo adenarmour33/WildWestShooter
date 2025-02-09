@@ -338,8 +338,7 @@ document.addEventListener('DOMContentLoaded', () => {
         localBullets: [],
         scores: {},
         isAdmin: false,
-        isModerator: false,
-        chatMessages: []
+        isModerator: false
     };
 
     // UI elements
@@ -744,7 +743,6 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState.players = state.players;
         gameState.bullets = state.bullets;
         gameState.scores = state.scores;
-        gameState.chatMessages = state.chat_messages;
 
         if (!gameState.hasOwnProperty('isAdmin')) {
             console.log('Setting initial admin status:', state.is_admin);
@@ -779,94 +777,116 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // Add chat UI
-    function createChatUI() {
-        const chatContainer = document.createElement('div');
-        chatContainer.className = 'chat-container';
-        chatContainer.innerHTML = `
-            <div class="chat-messages"></div>
-            <div class="chat-input-container">
-                <input type="text" class="chat-input" placeholder="Press Enter to chat...">
+    // Remove old chat UI code and add command line interface
+    function createCommandLine() {
+        const cmdContainer = document.createElement('div');
+        cmdContainer.className = 'command-line';
+        cmdContainer.style.display = 'none';
+        cmdContainer.innerHTML = `
+            <div class="command-input-container">
+                <span class="command-prompt">/</span>
+                <input type="text" class="command-input" placeholder="Enter command...">
             </div>
         `;
-        document.body.appendChild(chatContainer);
+        document.body.appendChild(cmdContainer);
 
-        const chatInput = chatContainer.querySelector('.chat-input');
-        const chatMessages = chatContainer.querySelector('.chat-messages');
+        const cmdInput = cmdContainer.querySelector('.command-input');
 
-        chatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && chatInput.value.trim()) {
-                socket.emit('chat_message', { message: chatInput.value.trim() });
-                chatInput.value = '';
+        // Add command line styles
+        const style = document.createElement('style');
+        style.textContent = `
+            .command-line {
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 80%;
+                max-width: 600px;
+                background: rgba(0, 0, 0, 0.8);
+                border-radius: 5px;
+                padding: 10px;
+                z-index: 1000;
             }
-        });
+            .command-input-container {
+                display: flex;
+                align-items: center;
+            }
+            .command-prompt {
+                color: #fff;
+                margin-right: 5px;
+                font-family: monospace;
+            }
+            .command-input {
+                flex: 1;
+                background: transparent;
+                border: none;
+                color: #fff;
+                font-family: monospace;
+                font-size: 16px;
+                outline: none;
+            }
+            .command-input::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+        `;
+        document.head.appendChild(style);
 
-        return { chatMessages };
+        return { cmdContainer, cmdInput };
     }
 
-    const chatUI = createChatUI();
+    // Command processing
+    function processCommand(command) {
+        const cmd = command.toLowerCase().trim();
 
-    socket.on('chat_update', (data) => {
-        chatUI.chatMessages.innerHTML = data.messages.map(msg => `
-            <div class="chat-message">
-                <span class="chat-timestamp">[${msg.timestamp}]</span>
-                <span class="chat-username">${msg.username}:</span>
-                <span class="chat-text">${msg.message}</span>
-            </div>
-        `).join('');
-        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
-    });
+        if (cmd === 'help') {
+            return `Available commands:
+            /help - Show this help message
+            /kill <player> - Admin only: Kill specified player
+            /god <player> - Admin only: Toggle god mode for player
+            /kick <player> - Mod only: Kick player from game
+            /mute <player> <duration> - Mod only: Mute player
+            /ban <player> - Admin only: Ban player`;
+        }
 
-    socket.on('muted', (data) => {
-        alert(`You have been muted for ${data.duration} minutes`);
-    });
+        const [action, ...args] = cmd.split(' ');
 
-    socket.on('kicked', (data) => {
-        alert(`You have been kicked: ${data.reason}`);
-        window.location.href = '/';
-    });
+        switch(action) {
+            case 'kill':
+            case 'god':
+            case 'kick':
+            case 'mute':
+            case 'ban':
+                if (!gameState.isAdmin && !gameState.isModerator) {
+                    return 'You do not have permission to use this command.';
+                }
+                executeAdminCommand(action);
+                return `Executing ${action} command...`;
+            default:
+                return 'Unknown command. Type /help for available commands.';
+        }
+    }
 
-    socket.on('moderator_status', (data) => {
-        gameState.isModerator = data.is_moderator;
-        if (data.is_moderator && !document.querySelector('.admin-panel')) {
-            createAdminPanel();
+    const commandLine = createCommandLine();
+
+    // Add command line toggle with ' key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === "'") {
+            e.preventDefault();
+            const isVisible = commandLine.cmdContainer.style.display === 'block';
+            commandLine.cmdContainer.style.display = isVisible ? 'none' : 'block';
+            if (!isVisible) {
+                commandLine.cmdInput.focus();
+            }
         }
     });
 
-    socket.on('god_mode_update', (data) => {
-        if (data.enabled) {
-            alert('God mode enabled');
-        } else {
-            alert('God mode disabled');
+    commandLine.cmdInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && commandLine.cmdInput.value.trim()) {
+            const result = processCommand(commandLine.cmdInput.value.trim());
+            console.log(result); // Display result in console for now
+            commandLine.cmdInput.value = '';
+            commandLine.cmdContainer.style.display = 'none';
         }
-    });
-
-    socket.on('player_hit', (data) => {
-        player.health -= data.damage;
-        updateUI();
-        if (player.health <= 0) {
-            player.deaths++;
-            socket.emit('player_died', { shooter: data.shooter });
-        }
-    });
-
-    socket.on('player_respawn', (data) => {
-        player.x = data.x;
-        player.y = data.y;
-        player.health = 100;
-        player.velX = 0;
-        player.velY = 0;
-        updateUI();
-    });
-
-    socket.on('player_kill', (data) => {
-        player.kills++;
-        player.score += 100; // Award points for a kill
-        updateUI();
-    });
-    socket.on('banned', (data) => {
-        alert(`You have been banned: ${data.reason}`);
-        window.location.href = '/logout';
     });
 
     updateUI();

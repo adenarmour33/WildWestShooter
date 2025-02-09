@@ -199,7 +199,6 @@ function createAdminPanel() {
     console.log('Admin panel added to document');
 }
 
-
 // Game setup
 let canvas, ctx, socket;
 let tileSize = 32;
@@ -235,6 +234,20 @@ assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
 // Initialize game after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM Content Loaded');
+
+    // Initialize gameState at the start
+    let gameState = {
+        players: {},
+        bullets: [],
+        localBullets: [],
+        scores: {},
+        isAdmin: false,
+        isModerator: false,
+        chatMessages: [],
+        userId: null,  // Store the current user's ID
+        adminIds: new Set()  // Store admin user IDs
+    };
+
     canvas = document.getElementById('gameCanvas');
     if (!canvas) {
         console.error('Canvas element not found');
@@ -344,18 +357,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Modify gameState initialization
-    let gameState = {
-        players: {},
-        bullets: [],
-        localBullets: [],
-        scores: {},
-        isAdmin: false,
-        isModerator: false,
-        chatMessages: [],
-        userId: null,  // Store the current user's ID
-        adminIds: new Set()  // Store admin user IDs
-    };
 
     // UI elements
     const healthBar = document.querySelector('.health-fill');
@@ -760,6 +761,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.user_id) {
             gameState.userId = data.user_id;
             gameState.isAdmin = data.is_admin || false;
+            gameState.isModerator = data.is_moderator || false;
             console.log('User authenticated:', {
                 userId: gameState.userId,
                 isAdmin: gameState.isAdmin
@@ -771,19 +773,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Command processing functions moved inside DOMContentLoaded
+    // Command processing function
     function processCommand(command) {
         // Remove the leading slash if present
         const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
 
         if (cmd === 'help') {
             return `Available commands:
-        /help - Show this help message
-        /kill <player_id> - Admin only: Kill specified player
-        /god <player_id> - Admin only: Toggle god mode for player
-        /kick <player_id> - Mod only: Kick player from game
-        /mute <player_id> <duration> - Mod only: Mute player
-        /ban <player_id> - Admin only: Ban player`;
+            /help - Show this help message
+            /kill <player_id> - Admin only: Kill specified player
+            /god <player_id> - Admin only: Toggle god mode for player
+            /kick <player_id> - Mod only: Kick player from game
+            /mute <player_id> <duration> - Mod only: Mute player
+            /ban <player_id> - Admin only: Ban player`;
         }
 
         const [action, ...args] = cmd.split(' ');
@@ -823,6 +825,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 return 'Unknown command. Type /help for available commands.';
         }
     }
+
+    // Create command line interface
+    const commandLine = createCommandLine();
+
+    // Socket events
+    socket.on('connect', () => {
+        console.log('Connected to server');
+
+        // Request authentication status immediately after connection
+        socket.emit('authenticate');
+    });
+
+    socket.on('authentication_response', (data) => {
+        console.log('Authentication response:', data);
+        if (data.user_id) {
+            gameState.userId = data.user_id;
+            gameState.isAdmin = data.is_admin || false;
+            gameState.isModerator = data.is_moderator || false;
+            console.log('User authenticated:', {
+                userId: gameState.userId,
+                isAdmin: gameState.isAdmin
+            });
+
+            if (gameState.isAdmin) {
+                createAdminPanel();
+            }
+        }
+    });
 
     socket.on('game_state', (state) => {
         console.log('Received game state:', state);
@@ -888,7 +918,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 bottom: 20px;
                 width: 300px;
                 height: 200px;
-                background: rgba(0, 0,0, 0.8);
+                background: rgba(0, 0, 0, 0.8);
                 border-radius: 5px;
                 display: flex;
                 flex-direction: column;
@@ -1043,6 +1073,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.user_id) {
             gameState.userId = data.user_id;
             gameState.isAdmin = data.is_admin || false;
+            gameState.isModerator = data.is_moderator || false;
             console.log('User authenticated:', {
                 userId: gameState.userId,
                 isAdmin: gameState.isAdmin
@@ -1054,19 +1085,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Command processing functions moved inside DOMContentLoaded
+    // Command processing function
     function processCommand(command) {
         // Remove the leading slash if present
         const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
 
         if (cmd === 'help') {
             return `Available commands:
-        /help - Show this help message
-        /kill <player_id> - Admin only: Kill specified player
-        /god <player_id> - Admin only: Toggle god mode for player
-        /kick <player_id> - Mod only: Kick player from game
-        /mute <player_id> <duration> - Mod only: Mute player
-        /ban <player_id> - Admin only: Ban player`;
+            /help - Show this help message
+            /kill <player_id> - Admin only: Kill specified player
+            /god <player_id> - Admin only: Toggle god mode for player
+            /kick <player_id> - Mod only: Kick player from game
+            /mute <player_id> <duration> - Mod only: Mute player
+            /ban <player_id> - Admin only: Ban player`;
         }
 
         const [action, ...args] = cmd.split(' ');
@@ -1232,5 +1263,3 @@ let joystick = {
     deltaX: 0,
     deltaY: 0
 };
-
-//The function processCommand is already moved inside the DOMContentLoaded event listener.

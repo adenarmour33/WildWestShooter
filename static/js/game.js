@@ -248,6 +248,204 @@ document.addEventListener('DOMContentLoaded', () => {
         adminIds: new Set()  // Store admin user IDs
     };
 
+    // Create command line interface
+    function createCommandLine() {
+        const cmdContainer = document.createElement('div');
+        cmdContainer.className = 'command-line';
+        cmdContainer.style.display = 'none';
+        cmdContainer.innerHTML = `
+            <div class="command-input-container">
+                <span class="command-prompt">/</span>
+                <input type="text" class="command-input" placeholder="Enter command...">
+            </div>
+        `;
+        document.body.appendChild(cmdContainer);
+
+        const cmdInput = cmdContainer.querySelector('.command-input');
+
+        // Add styles
+        const style = document.createElement('style');
+        style.textContent = `
+            .command-line {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.8);
+                padding: 10px;
+                border-radius: 5px;
+                z-index: 1000;
+                display: none;
+            }
+            .command-input-container {
+                display: flex;
+                align-items: center;
+            }
+            .command-prompt {
+                color: #fff;
+                margin-right: 5px;
+                font-family: monospace;
+                font-size: 16px;
+            }
+            .command-input {
+                flex: 1;
+                background: transparent;
+                border: none;
+                color: #fff;
+                font-family: monospace;
+                font-size: 16px;
+                outline: none;
+                min-width: 300px;
+            }
+            .command-input::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Set up command input handling
+        cmdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && cmdInput.value.trim()) {
+                const result = processCommand(cmdInput.value.trim());
+                if (result) {
+                    // Display command result
+                    const resultElement = document.createElement('div');
+                    resultElement.style.cssText = `
+                        position: fixed;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        background: rgba(0, 0, 0, 0.8);
+                        color: white;
+                        padding: 10px 20px;
+                        border-radius: 5px;
+                        z-index: 1001;
+                    `;
+                    resultElement.textContent = result;
+                    document.body.appendChild(resultElement);
+                    setTimeout(() => document.body.removeChild(resultElement), 3000);
+                }
+                cmdInput.value = '';
+                cmdContainer.style.display = 'none';
+            }
+        });
+
+        // Toggle command line with forward slash
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '/' && document.activeElement !== cmdInput) {
+                e.preventDefault();
+                cmdContainer.style.display = cmdContainer.style.display === 'none' ? 'block' : 'none';
+                if (cmdContainer.style.display === 'block') {
+                    cmdInput.focus();
+                }
+            }
+        });
+
+        return { cmdContainer, cmdInput };
+    }
+
+    // Command processing function
+    function processCommand(command) {
+        // Remove the leading slash if present
+        const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
+
+        if (cmd === 'help') {
+            return `Available commands:
+            /help - Show this help message
+            /kill <player_id> - Admin only: Kill specified player
+            /god <player_id> - Admin only: Toggle god mode for player
+            /kick <player_id> - Mod only: Kick player from game
+            /mute <player_id> <duration> - Mod only: Mute player
+            /ban <player_id> - Admin only: Ban player`;
+        }
+
+        const [action, ...args] = cmd.split(' ');
+        const targetId = args[0];  // First argument is now the player ID
+
+        // Check if user is authenticated
+        if (!gameState.userId) {
+            return 'Error: You must be logged in to use commands.';
+        }
+
+        // Check permissions and execute command
+        switch(action) {
+            case 'kill':
+            case 'god':
+            case 'ban':
+                if (!gameState.isAdmin) {
+                    return 'You do not have permission to use this command.';
+                }
+                if (!targetId) {
+                    return `${action} command requires a player ID.`;
+                }
+                executeAdminCommand(action, targetId);
+                return `Executing ${action} command on player ${targetId}`;
+
+            case 'kick':
+            case 'mute':
+                if (!gameState.isAdmin && !gameState.isModerator) {
+                    return 'You do not have permission to use this command.';
+                }
+                if (!targetId) {
+                    return `${action} command requires a player ID.`;
+                }
+                executeAdminCommand(action, targetId);
+                return `Executing ${action} command on player ${targetId}`;
+
+            default:
+                return 'Unknown command. Type /help for available commands.';
+        }
+    }
+
+    // Initialize command line interface
+    const { cmdContainer, cmdInput } = createCommandLine();
+
+    // Create chat UI
+    const chatUI = createChatUI();
+
+    // Add chat message handler
+    socket.on('chat_message', (data) => {
+        if (!chatUI.chatMessages) return;
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'chat-message';
+
+        const timestamp = new Date().toLocaleTimeString();
+        messageDiv.innerHTML = `
+            <span class="chat-timestamp">[${timestamp}]</span>
+            <span class="chat-username">${data.username}:</span>
+            <span class="chat-text">${data.message}</span>
+        `;
+
+        chatUI.chatMessages.appendChild(messageDiv);
+        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
+    });
+
+
+    // Socket event handlers
+    socket.on('connect', () => {
+        console.log('Connected to server');
+        socket.emit('authenticate');
+    });
+
+    socket.on('authentication_response', (data) => {
+        console.log('Authentication response:', data);
+        if (data.user_id) {
+            gameState.userId = data.user_id;
+            gameState.isAdmin = data.is_admin || false;
+            gameState.isModerator = data.is_moderator || false;
+            console.log('User authenticated:', {
+                userId: gameState.userId,
+                isAdmin: gameState.isAdmin,
+                isModerator: gameState.isModerator
+            });
+
+            if (gameState.isAdmin) {
+                createAdminPanel();
+            }
+        }
+    });
+
     canvas = document.getElementById('gameCanvas');
     if (!canvas) {
         console.error('Canvas element not found');
@@ -578,8 +776,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-
-
     function update(deltaTime) {
         if (player.health <= 0) return;
 
@@ -751,8 +947,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Socket events
     socket.on('connect', () => {
         console.log('Connected to server');
-
-        // Request authentication status immediately after connection
         socket.emit('authenticate');
     });
 
@@ -764,7 +958,8 @@ document.addEventListener('DOMContentLoaded', () => {
             gameState.isModerator = data.is_moderator || false;
             console.log('User authenticated:', {
                 userId: gameState.userId,
-                isAdmin: gameState.isAdmin
+                isAdmin: gameState.isAdmin,
+                isModerator: gameState.isModerator
             });
 
             if (gameState.isAdmin) {
@@ -773,7 +968,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Command processing function
+
     function processCommand(command) {
         // Remove the leading slash if present
         const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
@@ -825,34 +1020,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return 'Unknown command. Type /help for available commands.';
         }
     }
-
-    // Create command line interface
-    const commandLine = createCommandLine();
-
-    // Socket events
-    socket.on('connect', () => {
-        console.log('Connected to server');
-
-        // Request authentication status immediately after connection
-        socket.emit('authenticate');
-    });
-
-    socket.on('authentication_response', (data) => {
-        console.log('Authentication response:', data);
-        if (data.user_id) {
-            gameState.userId = data.user_id;
-            gameState.isAdmin = data.is_admin || false;
-            gameState.isModerator = data.is_moderator || false;
-            console.log('User authenticated:', {
-                userId: gameState.userId,
-                isAdmin: gameState.isAdmin
-            });
-
-            if (gameState.isAdmin) {
-                createAdminPanel();
-            }
-        }
-    });
 
     socket.on('game_state', (state) => {
         console.log('Received game state:', state);
@@ -962,234 +1129,21 @@ document.addEventListener('DOMContentLoaded', () => {
         return { chatMessages };
     }
 
-    // Command line interface
-    function createCommandLine() {
-        const cmdContainer = document.createElement('div');
-        cmdContainer.className = 'command-line';
-        cmdContainer.style.display = 'none';
-        cmdContainer.innerHTML = `
-            <div class="command-input-container">
-                <span class="command-prompt">/</span>
-                <input type="text" class="command-input" placeholder="Enter command...">
-            </div>
-        `;
-        document.body.appendChild(cmdContainer);
-
-        const cmdInput = cmdContainer.querySelector('.command-input');
-
-        // Add command line styles
-        const style = document.createElement('style');
-        style.textContent = `
-            .command-line {
-                position: fixed;
-                bottom: 20px;
-                left: 50%;
-                transform: translateX(-50%);
-                width: 80%;
-                max-width: 600px;
-                background: rgba(0, 0, 0, 0.8);
-                border-radius: 5px;
-                padding: 10px;
-                z-index: 1000;
-            }
-            .command-input-container {
-                display: flex;
-                align-items: center;
-            }
-            .command-prompt {
-                color: #fff;
-                margin-right: 5px;
-                font-family: monospace;
-            }
-            .command-input {
-                flex: 1;
-                background: transparent;
-                border: none;
-                color: #fff;
-                font-family: monospace;
-                font-size: 16px;
-                outline: none;
-            }
-            .command-input::placeholder {
-                color: rgba(255, 255, 255, 0.5);
-            }
-        `;
-        document.head.appendChild(style);
-
-        // Set up command input handling
-        cmdInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && cmdInput.value.trim()) {
-                const result = processCommand(cmdInput.value.trim());
-                if (result) {
-                    // Display command result
-                    const resultElement = document.createElement('div');
-                    resultElement.style.cssText = `
-                        position: fixed;
-                        top: 50%;
-                        left: 50%;
-                        transform: translate(-50%, -50%);
-                        background: rgba(0, 0, 0, 0.8);
-                        color: white;
-                        padding: 10px 20px;
-                        border-radius: 5px;
-                        z-index: 1001;
-                    `;
-                    resultElement.textContent = result;
-                    document.body.appendChild(resultElement);
-                    setTimeout(() => document.body.removeChild(resultElement), 3000);
-                }
-                cmdInput.value = '';
-                cmdContainer.style.display = 'none';
-            }
-        });
-
-        // Toggle command line with forward slash
-        document.addEventListener('keydown', (e) => {
-            if (e.key === '/' && document.activeElement !== cmdInput) {
-                e.preventDefault();
-                cmdContainer.style.display = cmdContainer.style.display === 'none' ? 'block' : 'none';
-                if (cmdContainer.style.display === 'block') {
-                    cmdInput.focus();
-                }
-            }
-        });
-
-        return { cmdContainer, cmdInput };
-    }
-
-    // Initialize command line interface within DOMContentLoaded
-    const { cmdContainer, cmdInput } = createCommandLine();
-
-    // Socket events
-    socket.on('connect', () => {
-        console.log('Connected to server');
-
-        // Request authentication status immediately after connection
-        socket.emit('authenticate');
-    });
-
-    socket.on('authentication_response', (data) => {
-        console.log('Authentication response:', data);
-        if (data.user_id) {
-            gameState.userId = data.user_id;
-            gameState.isAdmin = data.is_admin || false;
-            gameState.isModerator = data.is_moderator || false;
-            console.log('User authenticated:', {
-                userId: gameState.userId,
-                isAdmin: gameState.isAdmin
-            });
-
-            if (gameState.isAdmin) {
-                createAdminPanel();
-            }
-        }
-    });
-
-    // Command processing function
-    function processCommand(command) {
-        // Remove the leading slash if present
-        const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
-
-        if (cmd === 'help') {
-            return `Available commands:
-            /help - Show this help message
-            /kill <player_id> - Admin only: Kill specified player
-            /god <player_id> - Admin only: Toggle god mode for player
-            /kick <player_id> - Mod only: Kick player from game
-            /mute <player_id> <duration> - Mod only: Mute player
-            /ban <player_id> - Admin only: Ban player`;
-        }
-
-        const [action, ...args] = cmd.split(' ');
-        const targetId = args[0];  // First argument is now the player ID
-
-        // Check if user is authenticated
-        if (!gameState.userId) {
-            return 'Error: You must be logged in to use commands.';
-        }
-
-        // Check permissions and execute command
-        switch(action) {
-            case 'kill':
-            case 'god':
-            case 'ban':
-                if (!gameState.isAdmin) {
-                    return 'You do not have permission to use this command.';
-                }
-                if (!targetId) {
-                    return `${action} command requires a player ID.`;
-                }
-                executeAdminCommand(action, targetId);
-                return `Executing ${action} command on player ${targetId}`;
-
-            case 'kick':
-            case 'mute':
-                if (!gameState.isAdmin && !gameState.isModerator) {
-                    return 'You do not have permission to use this command.';
-                }
-                if (!targetId) {
-                    return `${action} command requires a player ID.`;
-                }
-                executeAdminCommand(action, targetId);
-                return `Executing ${action} command on player ${targetId}`;
-
-            default:
-                return 'Unknown command. Type /help for available commands.';
-        }
-    }
-
-    socket.on('game_state', (state) => {
-        console.log('Received game state:', state);
-
-        // Store all relevant state information
-        gameState.players = state.players || {};
-        gameState.bullets = state.bullets || [];
-        gameState.scores = state.scores || {};
-        gameState.chatMessages = state.chat_messages || [];
-
-        // Update player list if admin panel exists
-        const playerList = document.getElementById('playerList');
-        if (playerList && Object.keys(gameState.players).length > 0) {
-            updatePlayerList();
-        }
-
-        updateUI();
-    });
-
-    function updatePlayerList() {
-        const playerList = document.getElementById('playerList');
-        if (!playerList) return;
-
-        playerList.innerHTML = '<option value="">Select Player</option>';
-        Object.entries(gameState.players).forEach(([id, player]) => {
-            if (id !== gameState.userId) {  // Don't include self
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = `${player.username} (ID: ${id})`;
-                playerList.appendChild(option);
-            }
-        });
-    }
-
-    // Add chat UI
-    const chatUI = createChatUI();
-    const commandLine = createCommandLine();
-
     // Add command line toggle with ' key
     document.addEventListener('keydown', (e) => {
         if (e.key === "'") {
             e.preventDefault();
-            const isVisible = commandLine.cmdContainer.style.display === 'block';
-            commandLine.cmdContainer.style.display = isVisible ? 'none' : 'block';
+            const isVisible = cmdContainer.style.display === 'block';
+            cmdContainer.style.display = isVisible ? 'none' : 'block';
             if (!isVisible) {
-                commandLine.cmdInput.focus();
+                cmdInput.focus();
             }
         }
     });
 
-    commandLine.cmdInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && commandLine.cmdInput.value.trim()) {
-            const result = processCommand(commandLine.cmdInput.value.trim());
+    cmdInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && cmdInput.value.trim()) {
+            const result = processCommand(cmdInput.value.trim());
             // Create a temporary message element to show the command result
             const resultElement = document.createElement('div');
             resultElement.style.cssText = `
@@ -1211,22 +1165,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.body.removeChild(resultElement);
             }, 3000);
 
-            commandLine.cmdInput.value = '';
-            commandLine.cmdContainer.style.display = 'none';
+            cmdInput.value = '';
+            cmdContainer.style.display = 'none';
         }
     });
 
     // Socket events for chat
-    socket.on('chat_update', (data) => {
-        chatUI.chatMessages.innerHTML = data.messages.map(msg => `
-            <div class="chat-message">
-                <span class="chat-timestamp">[${msg.timestamp}]</span>
-                <span class="chat-username">${msg.username}:</span>
-                <span class="chat-text">${msg.message}</span>
-            </div>
-        `).join('');
-        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
-    });
 
     // Update socket events for admin commands
     socket.on('admin_command_result', (data) => {

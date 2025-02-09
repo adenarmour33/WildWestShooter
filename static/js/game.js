@@ -1,40 +1,3 @@
-// Add typewriter sound setup at the beginning of the file
-let typeSound;
-
-// Initialize Tone.js synth for typewriter sound
-const typewriterSound = new Tone.Synth({
-    oscillator: {
-        type: "triangle"
-    },
-    envelope: {
-        attack: 0.001,
-        decay: 0.1,
-        sustain: 0,
-        release: 0.1
-    }
-}).toDestination();
-
-// Typing animation function
-function typeText(element, text, speed = 50) {
-    return new Promise(resolve => {
-        let i = 0;
-        element.textContent = '';
-
-        function type() {
-            if (i < text.length) {
-                element.textContent += text.charAt(i);
-                // Play typing sound
-                typewriterSound.triggerAttackRelease("C4", "32n", undefined, 0.1);
-                i++;
-                setTimeout(type, speed + Math.random() * 50); // Random delay for more natural typing
-            } else {
-                resolve();
-            }
-        }
-        type();
-    });
-}
-
 function executeAdminCommand(command, targetPlayer) {
     const playerList = document.getElementById('playerList');
     let targetId = null;
@@ -228,7 +191,6 @@ function createAdminPanel() {
     document.body.appendChild(adminPanel);
     console.log('Admin panel added to document');
 }
-
 
 // Game setup
 let canvas, ctx, socket;
@@ -605,7 +567,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-
     function update(deltaTime) {
         if (player.health <= 0) return;
 
@@ -902,363 +863,162 @@ document.addEventListener('DOMContentLoaded', () => {
         cmdContainer.style.display = 'none';
         cmdContainer.innerHTML = `
             <div class="command-input-container">
-                <span class="command-prompt">🤠 ></span>
-                <input type="text" class="command-input" placeholder="Type yer command, partner...">
+                <span class="command-prompt">/</span>
+                <input type="text" class="command-input" placeholder="Enter command...">
             </div>
-            <div class="command-output"></div>
         `;
         document.body.appendChild(cmdContainer);
 
-    const cmdInput = cmdContainer.querySelector('.command-input');
-    const cmdOutput = cmdContainer.querySelector('.command-output');
+        const cmdInput = cmdContainer.querySelector('.command-input');
 
-    // Add western-themed styles
-    const style = document.createElement('style');
-    style.textContent = `
-        @import url('https://fonts.googleapis.com/css2?family=Rye&display=swap');
+        // Add command line styles
+        const style = document.createElement('style');
+        style.textContent = `
+            .command-line {
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 80%;
+                max-width: 600px;
+                background: rgba(0, 0, 0, 0.8);
+                border-radius: 5px;
+                padding: 10px;
+                z-index: 1000;
+            }
+            .command-input-container {
+                display: flex;
+                align-items: center;
+            }
+            .command-prompt {
+                color: #fff;
+                margin-right: 5px;
+                font-family: monospace;
+            }
+            .command-input {
+                flex: 1;
+                background: transparent;
+                border: none;color: #fff;
+                font-family: monospace;
+                font-size: 16px;
+                outline: none;
+            }
+            .command-input::placeholder {
+                color: rgba(255, 255, 255, 0.5);
+            }
+        `;
+        document.head.appendChild(style);
 
-        .command-line {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80%;
-            max-width: 600px;
-            background: rgba(43, 29, 14, 0.9);
-            border: 3px solid #8B4513;
-            border-radius: 10px;
-            padding: 15px;
-            z-index: 1000;
-            font-family: 'Rye', cursive;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        .command-input-container {
-            display: flex;
-            align-items: center;
-            border-bottom: 2px solid #8B4513;
-            padding-bottom: 10px;
-            margin-bottom: 10px;
-        }
-        .command-prompt {
-            color: #FFD700;
-            margin-right: 10px;
-            font-size: 20px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-        .command-input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: #FFD700;
-            font-family: 'Rye', cursive;
-            font-size: 16px;
-            outline: none;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-        }
-        .command-input::placeholder {
-            color: rgba(255, 215, 0, 0.5);
-        }
-        .command-output {
-            color: #FFD700;
-            font-size: 14px;
-            min-height: 20px;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-        }
-        .typed-cursor {
-            opacity: 1;
-            animation: blink 0.7s infinite;
-        }
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
-        }
-    `;
-    document.head.appendChild(style);
-
-    return { cmdContainer, cmdInput, cmdOutput };
-}
-
-// Update the command processing to use animated typing for output
-async function displayCommandResult(result, cmdOutput) {
-    // Clear previous output
-    cmdOutput.textContent = '';
-    // Add typing animation
-    await typeText(cmdOutput, result);
-}
-
-// Update the command input event listener
-commandLine.cmdInput.addEventListener('keypress', async (e) => {
-    if (e.key === 'Enter' && commandLine.cmdInput.value.trim()) {
-        const result = processCommand(commandLine.cmdInput.value.trim());
-        const cmdOutput = commandLine.cmdContainer.querySelector('.command-output');
-
-        // Display the command result with typing animation
-        await displayCommandResult(result, cmdOutput);
-
-        // Clear input and keep command line visible for a moment
-        commandLine.cmdInput.value = '';
-
-        // Hide command line after a delay
-        setTimeout(() => {
-            commandLine.cmdContainer.style.display = 'none';
-        }, 3000);
+        return { cmdContainer, cmdInput };
     }
-});
 
-// Add chat UI
-function createChatUI() {
-    const chatContainer = document.createElement('div');
-    chatContainer.className = 'chat-container';
-    chatContainer.innerHTML = `
-        <div class="chat-messages"></div>
-        <div class="chat-input-container">
-            <input type="text" class="chat-input" placeholder="Press Enter to chat...">
-        </div>
-    `;
-    document.body.appendChild(chatContainer);
+    // Command processing
+    function processCommand(command) {
+        // Remove the leading slash if present
+        const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
 
-    const chatInput = chatContainer.querySelector('.chat-input');
-    const chatMessages = chatContainer.querySelector('.chat-messages');
-
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && chatInput.value.trim()) {
-            socket.emit('chat_message', { message: chatInput.value.trim() });
-            chatInput.value = '';
-        }
-    });
-
-    // Add chat styles
-    const style = document.createElement('style');
-    style.textContent = `
-        .chat-container {
-            position: fixed;
-            left: 20px;
-            bottom: 20px;
-            width: 300px;
-            height: 200px;
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 5px;
-            display: flex;
-            flex-direction: column;
-            z-index: 1000;
-        }
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 10px;
-            color: white;
-        }
-        .chat-input-container {
-            padding: 10px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .chat-input {
-            width: 100%;
-            background: rgba(255, 255, 255, 0.1);
-            border: none;
-            padding: 5px 10px;
-            color: white;
-            border-radius: 3px;
-        }
-        .chat-message {
-            margin-bottom: 5px;
-        }
-        .chat-timestamp {
-            color: #666;
-            margin-right: 5px;
-        }
-        .chat-username {
-            color: #4a9eff;
-            margin-right: 5px;
-        }
-        .chat-text {
-            color: #fff;
-        }
-    `;
-    document.head.appendChild(style);
-
-    return { chatMessages };
-}
-
-// Command line interface
-function createCommandLine() {
-    const cmdContainer = document.createElement('div');
-    cmdContainer.className = 'command-line';
-    cmdContainer.style.display = 'none';
-    cmdContainer.innerHTML = `
-        <div class="command-input-container">
-            <span class="command-prompt">🤠 ></span>
-            <input type="text" class="command-input" placeholder="Type yer command, partner...">
-        </div>
-        <div class="command-output"></div>
-    `;
-    document.body.appendChild(cmdContainer);
-
-    const cmdInput = cmdContainer.querySelector('.command-input');
-    const cmdOutput = cmdContainer.querySelector('.command-output');
-
-    // Add western-themed styles
-    const style = document.createElement('style');
-    style.textContent = `
-        @import url('https://fonts.googleapis.com/css2?family=Rye&display=swap');
-
-        .command-line {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 80%;
-            max-width: 600px;
-            background: rgba(43, 29, 14, 0.9);
-            border: 3px solid #8B4513;
-            border-radius: 10px;
-            padding: 15px;
-            z-index: 1000;
-            font-family: 'Rye', cursive;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
-        .command-input-container {
-            display: flex;
-            align-items: center;
-            border-bottom: 2px solid #8B4513;
-            padding-bottom: 10px;
-            margin-bottom: 10px;
-        }
-        .command-prompt {
-            color: #FFD700;
-            margin-right: 10px;
-            font-size: 20px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-        .command-input {
-            flex: 1;
-            background: transparent;
-            border: none;
-            color: #FFD700;
-            font-family: 'Rye', cursive;
-            font-size: 16px;
-            outline: none;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-        }
-        .command-input::placeholder {
-            color: rgba(255, 215, 0, 0.5);
-        }
-        .command-output {
-            color: #FFD700;
-            font-size: 14px;
-            min-height: 20px;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-        }
-        .typed-cursor {
-            opacity: 1;
-            animation: blink 0.7s infinite;
-        }
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
-        }
-    `;
-    document.head.appendChild(style);
-
-    return { cmdContainer, cmdInput, cmdOutput };
-}
-
-// Command processing
-function processCommand(command) {
-    // Remove the leading slash if present
-    const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
-
-    if (cmd === 'help') {
-        return `Available commands:
+        if (cmd === 'help') {
+            return `Available commands:
         /help - Show this help message
         /kill <player> - Admin only: Kill specified player
         /god <player> - Admin only: Toggle god mode for player
         /kick <player> - Mod only: Kick player from game
         /mute <player> <duration> - Mod only: Mute player
         /ban <player> - Admin only: Ban player`;
-    }
+        }
 
-    const [action, ...args] = cmd.split(' ');
-    const targetPlayer = args.join(' ');
+        const [action, ...args] = cmd.split(' ');
+        const targetPlayer = args.join(' ');
 
-    // First check permissions
-    switch(action) {
-        case 'kill':
-        case 'god':
-        case 'ban':
-            if (!gameState.isAdmin) {
-                return 'You do not have permission to use this command.';
-            }
-            if (!targetPlayer) {
-                return 'Please specify a player name.';
-            }
-            executeAdminCommand(action, targetPlayer);
-            return `Executing ${action} command on player ${targetPlayer}...`;
+        // First check permissions
+        switch(action) {
+            case 'kill':
+            case 'god':
+            case 'ban':
+                if (!gameState.isAdmin) {
+                    return 'You do not have permission to use this command.';
+                }
+                if (!targetPlayer) {
+                    return 'Please specify a player name.';
+                }
+                executeAdminCommand(action, targetPlayer);
+                return `Executing ${action} command on player ${targetPlayer}...`;
 
-        case 'kick':
-        case 'mute':
-            if (!gameState.isAdmin && !gameState.isModerator) {
-                return 'You do not have permission to use this command.';
-            }
-            if (!targetPlayer) {
-                return 'Please specify a player name.';
-            }
-            executeAdminCommand(action, targetPlayer);
-            return `Executing ${action} command on player ${targetPlayer}...`;
+            case 'kick':
+            case 'mute':
+                if (!gameState.isAdmin && !gameState.isModerator) {
+                    return 'You do not have permission to use this command.';
+                }
+                if (!targetPlayer) {
+                    return 'Please specify a player name.';
+                }
+                executeAdminCommand(action, targetPlayer);
+                return `Executing ${action} command on player ${targetPlayer}...`;
 
-        default:
-            return 'Unknown command. Type /help for available commands.';
-    }
-}
-
-const chatUI = createChatUI();
-const commandLine = createCommandLine();
-
-// Add command line toggle with ' key
-document.addEventListener('keydown', (e) => {
-    if (e.key === "'") {
-        e.preventDefault();
-        const isVisible = commandLine.cmdContainer.style.display === 'block';
-        commandLine.cmdContainer.style.display = isVisible ? 'none' : 'block';
-        if (!isVisible) {
-            commandLine.cmdInput.focus();
+            default:
+                return 'Unknown command. Type /help for available commands.';
         }
     }
-});
 
-commandLine.cmdInput.addEventListener('keypress', async (e) => {
-    if (e.key === 'Enter' && commandLine.cmdInput.value.trim()) {
-        const result = processCommand(commandLine.cmdInput.value.trim());
-        const cmdOutput = commandLine.cmdContainer.querySelector('.command-output');
+    const chatUI = createChatUI();
+    const commandLine = createCommandLine();
 
-        // Display the command result with typing animation
-        await displayCommandResult(result, cmdOutput);
+    // Add command line toggle with ' key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === "'") {
+            e.preventDefault();
+            const isVisible = commandLine.cmdContainer.style.display === 'block';
+            commandLine.cmdContainer.style.display = isVisible ? 'none' : 'block';
+            if (!isVisible) {
+                commandLine.cmdInput.focus();
+            }
+        }
+    });
 
-        // Clear input and keep command line visible for a moment
-        commandLine.cmdInput.value = '';
+    commandLine.cmdInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && commandLine.cmdInput.value.trim()) {
+            const result = processCommand(commandLine.cmdInput.value.trim());
+            // Create a temporary message element to show the command result
+            const resultElement = document.createElement('div');
+            resultElement.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                z-index: 1001;
+            `;
+            resultElement.textContent = result;
+            document.body.appendChild(resultElement);
 
-        // Hide command line after a delay
-        setTimeout(() => {
+            // Remove the result message after 3 seconds
+            setTimeout(() => {
+                document.body.removeChild(resultElement);
+            }, 3000);
+
+            commandLine.cmdInput.value = '';
             commandLine.cmdContainer.style.display = 'none';
-        }, 3000);
-    }
-});
+        }
+    });
 
-// Socket events for chat
-socket.on('chat_update', (data) => {
-    chatUI.chatMessages.innerHTML = data.messages.map(msg => `
-        <div class="chat-message">
-            <span class="chat-timestamp">[${msg.timestamp}]</span>
-            <span class="chat-username">${msg.username}:</span>
-            <span class="chat-text">${msg.message}</span>
-        </div>
-    `).join('');
-    chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
-});
+    // Socket events for chat
+    socket.on('chat_update', (data) => {
+        chatUI.chatMessages.innerHTML = data.messages.map(msg => `
+            <div class="chat-message">
+                <span class="chat-timestamp">[${msg.timestamp}]</span>
+                <span class="chat-username">${msg.username}:</span>
+                <span class="chat-text">${msg.message}</span>
+            </div>
+        `).join('');
+        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
+    });
 
-// Other socket events remain unchanged
-updateUI();
-requestAnimationFrame(gameLoop);
+    // Other socket events remain unchanged
+    updateUI();
+    requestAnimationFrame(gameLoop);
 });
 
 let joystick = {

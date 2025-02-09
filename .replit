@@ -1,11 +1,11 @@
-modules = ["python-3.11", "nodejs-20"]
+modules = ["python-3.11"]
 
 [nix]
 channel = "stable-24_05"
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["sh", "-c", "python3 main.py"]
+run = ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
 
 [workflows]
 runButton = "Project"
@@ -31,7 +31,7 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python3 main.py"
+args = "python main.py"
 waitForPort = 5000
 
 [[ports]]

@@ -1,39 +1,3 @@
-const adminStyles = document.createElement('style');
-adminStyles.textContent = `
-    .admin-panel {
-        position: fixed;
-        top: 20px;
-        right: -200px;
-        width: 200px;
-        background: rgba(0, 0, 0, 0.8);
-        padding: 15px;
-        border-radius: 10px 0 0 10px;
-        transition: right 0.3s ease;
-        z-index: 1000;
-    }
-
-    .admin-panel.active {
-        right: 0;
-    }
-
-    .admin-toggle {
-        position: absolute;
-        left: -40px;
-        top: 0;
-        width: 40px;
-        height: 40px;
-        background: rgba(0, 0, 0, 0.8);
-        border: none;
-        border-radius: 10px 0 0 10px;
-        cursor: pointer;
-        color: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-`;
-document.head.appendChild(adminStyles);
-
 function executeAdminCommand(command) {
     const playerList = document.getElementById('playerList');
     const selectedPlayer = playerList.value;
@@ -96,6 +60,7 @@ function executeAdminCommand(command) {
 }
 
 function toggleAdminPanel() {
+    console.log('Toggling admin panel');
     const panel = document.querySelector('.admin-panel');
     if (panel) {
         panel.classList.toggle('active');
@@ -103,31 +68,84 @@ function toggleAdminPanel() {
 }
 
 function createAdminPanel() {
-    // Only create if it doesn't exist
+    console.log('Creating admin panel');
+
+    // Don't create if it already exists
     if (document.querySelector('.admin-panel')) {
+        console.log('Admin panel already exists');
         return;
     }
 
+    // Create and inject styles first
+    const style = document.createElement('style');
+    style.textContent = `
+        .admin-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 0, 0, 0.8);
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .admin-panel {
+            position: fixed;
+            top: 20px;
+            right: -200px;
+            width: 200px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            transition: right 0.3s ease;
+            z-index: 1999;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        .admin-panel.active {
+            right: 20px;
+        }
+    `;
+    document.head.appendChild(style);
+    console.log('Admin styles injected');
+
+    // Create toggle button first (separate from panel)
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'admin-toggle';
+    toggleBtn.innerHTML = '<span class="action-icon">⚙️</span>';
+    toggleBtn.onclick = toggleAdminPanel;
+    document.body.appendChild(toggleBtn);
+    console.log('Toggle button created');
+
+    // Create panel
     const adminPanel = document.createElement('div');
     adminPanel.className = 'admin-panel';
 
-    // Create player list dropdown first
+    // Add content to panel
     const playerList = document.createElement('select');
     playerList.id = 'playerList';
     playerList.className = 'form-select mb-2';
     playerList.innerHTML = '<option value="">Select Player</option>';
     adminPanel.appendChild(playerList);
 
-    // Admin-only buttons
+    // Add buttons based on permissions
     if (gameState.isAdmin) {
-        const buttons = [
+        const adminButtons = [
             { text: 'Instant Kill', command: 'kill', class: 'btn-danger' },
             { text: 'Toggle God Mode', command: 'god', class: 'btn-warning' },
             { text: 'Toggle Moderator', command: 'mod', class: 'btn-info' },
             { text: 'Ban Player', command: 'ban', class: 'btn-danger' }
         ];
 
-        buttons.forEach(btn => {
+        adminButtons.forEach(btn => {
             const button = document.createElement('button');
             button.textContent = btn.text;
             button.className = `btn ${btn.class} mb-2 w-100`;
@@ -136,7 +154,6 @@ function createAdminPanel() {
         });
     }
 
-    // Moderator buttons (available to both admins and moderators)
     const modButtons = [
         { text: 'Kick Player', command: 'kick', class: 'btn-warning' },
         { text: 'Mute Player', command: 'mute', class: 'btn-secondary' }
@@ -150,21 +167,14 @@ function createAdminPanel() {
         adminPanel.appendChild(button);
     });
 
-    // Add toggle button
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'admin-toggle';
-    toggleBtn.onclick = toggleAdminPanel;
-    toggleBtn.innerHTML = '<span class="action-icon">⚙️</span>';
-    adminPanel.appendChild(toggleBtn);
+    document.body.appendChild(adminPanel);
+    console.log('Admin panel added to document');
 
-    // Update player list periodically
+    // Start updating player list
     setInterval(() => {
         socket.emit('get_player_info');
     }, 1000);
-
-    document.body.appendChild(adminPanel);
 }
-
 
 // Game setup
 let canvas, ctx, socket;
@@ -200,6 +210,7 @@ assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
 
 // Initialize game after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM Content Loaded');
     canvas = document.getElementById('gameCanvas');
     if (!canvas) {
         console.error('Canvas element not found');
@@ -715,20 +726,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('game_state', (state) => {
+        console.log('Received game state:', state);
+        console.log('Admin status:', state.is_admin);
+
         gameState.players = state.players;
         gameState.bullets = state.bullets;
         gameState.scores = state.scores;
         gameState.chatMessages = state.chat_messages;
 
-        // Set admin status only once on initial connection
         if (!gameState.hasOwnProperty('isAdmin')) {
-            console.log('Setting admin status:', state.is_admin);
+            console.log('Setting initial admin status:', state.is_admin);
             gameState.isAdmin = state.is_admin;
             gameState.isModerator = state.is_moderator;
 
-            // Create admin panel if user is admin
-            if (state.is_admin) {
-                console.log('Creating admin panel');
+            if (state.is_admin || state.is_moderator) {
+                console.log('User has admin/mod privileges, creating panel');
                 createAdminPanel();
             }
         }
@@ -738,7 +750,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('player_info', (data) => {
         const playerList = document.getElementById('playerList');
-        if (!playerList) return;
+        if (!playerList) {
+            console.log('Player list element not found');
+            return;
+        }
 
         playerList.innerHTML = '<option value="">Select Player</option>';
         data.players.forEach(player => {
@@ -801,7 +816,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('moderator_status', (data) => {
         gameState.isModerator = data.is_moderator;
-        if (data.is_moderator && !adminPanel) {
+        if (data.is_moderator && !document.querySelector('.admin-panel')) {
             createAdminPanel();
         }
     });

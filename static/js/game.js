@@ -1,9 +1,19 @@
-function executeAdminCommand(command) {
+function executeAdminCommand(command, targetPlayer) {
     const playerList = document.getElementById('playerList');
-    const selectedPlayer = playerList.value;
+    let targetId = null;
 
-    if (!selectedPlayer) {
-        alert('Please select a player first');
+    // Find the player ID from the select element
+    if (playerList) {
+        for (let option of playerList.options) {
+            if (option.text.toLowerCase().includes(targetPlayer.toLowerCase())) {
+                targetId = option.value;
+                break;
+            }
+        }
+    }
+
+    if (!targetId) {
+        console.log('Player not found:', targetPlayer);
         return;
     }
 
@@ -11,19 +21,13 @@ function executeAdminCommand(command) {
         case 'kill':
             socket.emit('admin_command', {
                 command: 'instant_kill',
-                target_id: selectedPlayer
+                target_id: targetId
             });
             break;
         case 'god':
             socket.emit('admin_command', {
                 command: 'god_mode',
-                target_id: selectedPlayer
-            });
-            break;
-        case 'mod':
-            socket.emit('admin_command', {
-                command: 'make_moderator',
-                target_id: selectedPlayer
+                target_id: targetId
             });
             break;
         case 'ban':
@@ -31,7 +35,7 @@ function executeAdminCommand(command) {
             if (reason) {
                 socket.emit('admin_command', {
                     command: 'ban_player',
-                    target_id: selectedPlayer,
+                    target_id: targetId,
                     reason: reason
                 });
             }
@@ -41,7 +45,7 @@ function executeAdminCommand(command) {
             if (kickReason) {
                 socket.emit('admin_command', {
                     command: 'kick',
-                    target_id: selectedPlayer,
+                    target_id: targetId,
                     reason: kickReason
                 });
             }
@@ -51,7 +55,7 @@ function executeAdminCommand(command) {
             if (duration) {
                 socket.emit('admin_command', {
                     command: 'mute',
-                    target_id: selectedPlayer,
+                    target_id: targetId,
                     duration: parseInt(duration)
                 });
             }
@@ -894,8 +898,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .command-input {
                 flex: 1;
                 background: transparent;
-                border: none;
-                color: #fff;
+                border: none;color: #fff;
                 font-family: monospace;
                 font-size: 16px;
                 outline: none;
@@ -925,18 +928,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const [action, ...args] = cmd.split(' ');
+        const targetPlayer = args.join(' ');
 
+        // First check permissions
         switch(action) {
             case 'kill':
             case 'god':
+            case 'ban':
+                if (!gameState.isAdmin) {
+                    return 'You do not have permission to use this command.';
+                }
+                if (!targetPlayer) {
+                    return 'Please specify a player name.';
+                }
+                executeAdminCommand(action, targetPlayer);
+                return `Executing ${action} command on player ${targetPlayer}...`;
+
             case 'kick':
             case 'mute':
-            case 'ban':
                 if (!gameState.isAdmin && !gameState.isModerator) {
                     return 'You do not have permission to use this command.';
                 }
-                executeAdminCommand(action);
-                return `Executing ${action} command...`;
+                if (!targetPlayer) {
+                    return 'Please specify a player name.';
+                }
+                executeAdminCommand(action, targetPlayer);
+                return `Executing ${action} command on player ${targetPlayer}...`;
+
             default:
                 return 'Unknown command. Type /help for available commands.';
         }

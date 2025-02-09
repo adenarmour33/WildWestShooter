@@ -18,7 +18,7 @@
         <!-- Admin Panel - Only show for admin users -->
         {% if not session.get('is_guest', False) and session.get('is_admin', False) %}
         <div class="admin-panel">
-            <button class="admin-toggle" onclick="toggleAdminPanel()">
+            <button class="admin-toggle" style="left: 20px !important; right: auto;">
                 <span class="action-icon">⚙️</span>
             </button>
             <select id="playerList" class="form-select mb-2">

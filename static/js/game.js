@@ -242,8 +242,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const spread = (Math.random() - 0.5) * weapon.spread;
                 const angle = player.rotation + spread;
 
-                const bulletX = player.x + PLAYER_SIZE/2 + Math.cos(angle) * PLAYER_SIZE;
-                const bulletY = player.y + PLAYER_SIZE/2 + Math.sin(angle) * PLAYER_SIZE;
+                // Calculate bullet spawn position from the center of the player
+                const bulletX = player.x + PLAYER_SIZE/2;
+                const bulletY = player.y + PLAYER_SIZE/2;
 
                 const bullet = new Bullet(
                     bulletX,
@@ -345,7 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Update bullet position if no collision occurred
+            // Update bullet position
             const speed = bullet.speed || BULLET_SPEED;
             bullet.x += Math.cos(bullet.angle) * speed;
             bullet.y += Math.sin(bullet.angle) * speed;
@@ -367,7 +368,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return bullet.active;
         });
     }
-
 
 
     function update(deltaTime) {
@@ -424,6 +424,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function drawBullet(bullet) {
+        if (!bullet.active) return;
+        const screenX = bullet.x - camera.x;
+        const screenY = bullet.y - camera.y;
+
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        ctx.rotate(bullet.angle);
+
+        // Draw bullet as a small elongated rectangle
+        ctx.fillStyle = '#f1c40f';
+        ctx.fillRect(-4, -1, 8, 2);
+
+        ctx.restore();
+    }
+
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -445,18 +461,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Draw bullets
-        function drawBullet(bullet) {
-            if (!bullet.active) return;
-            const screenX = bullet.x - camera.x;
-            const screenY = bullet.y - camera.y;
-
-            ctx.fillStyle = '#f1c40f';
-            ctx.beginPath();
-            ctx.arc(screenX, screenY, 3, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
+        // Draw bullets with proper rotation
         gameState.localBullets.forEach(drawBullet);
         gameState.bullets.forEach(drawBullet);
 

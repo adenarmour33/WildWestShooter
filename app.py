@@ -321,6 +321,18 @@ def handle_connect():
         'is_moderator': session.get('is_moderator', False)
     }, room=request.sid)
 
+@socketio.on('authenticate')
+def handle_authenticate():
+    """Handle authentication request and send back user info"""
+    if request.sid in player_states:
+        user_data = {
+            'user_id': player_states[request.sid]['user_id'],
+            'is_admin': player_states[request.sid]['is_admin'],
+            'is_moderator': player_states[request.sid]['is_moderator']
+        }
+        emit('authentication_response', user_data)
+        logging.debug(f"Authentication response sent: {user_data}")
+
 @socketio.on('disconnect')
 def handle_disconnect():
     if request.sid in player_states:

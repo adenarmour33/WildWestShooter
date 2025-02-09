@@ -10,7 +10,7 @@
                     <div class="countdown-timer mb-4">
                         <h3 class="countdown" id="countdown">Waiting for players...</h3>
                     </div>
-                    
+
                     <div class="players-list mb-4">
                         <h4>Players</h4>
                         <div id="playersList" class="players-grid">
@@ -39,20 +39,20 @@ const playersListEl = document.getElementById('playersList');
 const statusTextEl = document.getElementById('statusText');
 const playerProgressEl = document.getElementById('playerProgress');
 
-let countdown = 30; // 30 second countdown
-let isCountdownActive = false;
-
 socket.on('lobby_update', (data) => {
     updatePlayersList(data.players);
     updateProgress(data.players.length);
-    
-    if (data.countdown_started && !isCountdownActive) {
-        startCountdown();
+
+    if (data.countdown_started) {
+        countdownEl.textContent = `Game starting in ${data.countdown} seconds...`;
     }
 });
 
 socket.on('game_starting', () => {
-    window.location.href = '/game';
+    countdownEl.textContent = 'Starting game...';
+    setTimeout(() => {
+        window.location.href = '/game';
+    }, 1000);
 });
 
 socket.on('bot_added', (data) => {
@@ -78,21 +78,8 @@ function updateProgress(playerCount) {
     const progress = (playerCount / maxPlayers) * 100;
     playerProgressEl.style.width = `${progress}%`;
     playerProgressEl.setAttribute('aria-valuenow', progress);
-    
-    statusTextEl.textContent = `Players: ${playerCount}/${maxPlayers}`;
-}
 
-function startCountdown() {
-    isCountdownActive = true;
-    const timer = setInterval(() => {
-        countdownEl.textContent = `Game starting in ${countdown} seconds...`;
-        countdown--;
-        
-        if (countdown < 0) {
-            clearInterval(timer);
-            countdownEl.textContent = 'Starting game...';
-        }
-    }, 1000);
+    statusTextEl.textContent = `Players: ${playerCount}/${maxPlayers}`;
 }
 </script>
 

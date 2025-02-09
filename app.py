@@ -42,7 +42,20 @@ class GameRoom:
             "Marshal", "Outlaw", "Bandit", "Renegade", "Maverick"
         ]
         self.started = False
-        self.countdown_time = 30  # 30 seconds countdown
+        self.countdown_time = 30
+        self.game_starting = False
+        self.spawn_points = [
+            {'x': 100, 'y': 100}, {'x': 900, 'y': 100},
+            {'x': 100, 'y': 900}, {'x': 900, 'y': 900},
+            {'x': 500, 'y': 500}, {'x': 300, 'y': 700},
+            {'x': 700, 'y': 300}, {'x': 200, 'y': 500},
+            {'x': 500, 'y': 200}, {'x': 800, 'y': 800}
+        ]
+
+    def get_random_spawn(self):
+        if not self.spawn_points:
+            return {'x': random.randint(100, 900), 'y': random.randint(100, 900)}
+        return random.choice(self.spawn_points)
 
     def add_bot(self):
         if len(self.players) >= self.max_players:
@@ -141,12 +154,15 @@ def handle_connect():
     if room not in game_rooms:
         game_rooms[room] = GameRoom()
 
+    # Get random spawn point
+    spawn = game_rooms[room].get_random_spawn()
+
     # Initialize player state
     player_states[request.sid] = {
         'user_id': session['user_id'],
         'username': session['username'],
-        'x': random.randint(100, 900),
-        'y': random.randint(100, 900),
+        'x': spawn['x'],
+        'y': spawn['y'],
         'rotation': 0,
         'health': 100,
         'score': 0,
@@ -158,8 +174,8 @@ def handle_connect():
     # Add player to game room
     game_rooms[room].players[request.sid] = {
         'username': session['username'],
-        'x': player_states[request.sid]['x'],
-        'y': player_states[request.sid]['y'],
+        'x': spawn['x'],
+        'y': spawn['y'],
         'rotation': 0,
         'health': 100,
         'weapon': 'pistol',
@@ -167,23 +183,45 @@ def handle_connect():
     }
 
     # Check if we should start countdown
-    if game_rooms[room].should_start_countdown():
+    if game_rooms[room].should_start_countdown() and not game_rooms[room].game_starting:
         game_rooms[room].countdown_started = True
-        emit('lobby_update', {
-            'players': [{'username': p['username'], 'isBot': p.get('is_bot', False)}
-                       for p in game_rooms[room].players.values()],
-            'countdown_started': True
-        }, room=room)
+        game_rooms[room].game_starting = True
 
-        # Start game after countdown
-        socketio.sleep(game_rooms[room].countdown_time)
-        if room in game_rooms and len(game_rooms[room].players) >= game_rooms[room].min_players:
-            game_rooms[room].started = True
-            emit('game_starting', room=room)
+        def start_game_countdown():
+            countdown = game_rooms[room].countdown_time
+            while countdown > 0 and room in game_rooms:
+                emit('lobby_update', {
+                    'players': [{'username': p['username'], 'isBot': p.get('is_bot', False)}
+                               for p in game_rooms[room].players.values()],
+                    'countdown_started': True,
+                    'countdown': countdown
+                }, room=room)
+                socketio.sleep(1)
+                countdown -= 1
+
+            if room in game_rooms and len(game_rooms[room].players) >= game_rooms[room].min_players:
+                game_rooms[room].started = True
+                emit('game_starting', room=room)
+
+        socketio.start_background_task(start_game_countdown)
     else:
         # Add bots if needed
         while game_rooms[room].should_add_bots():
             if game_rooms[room].add_bot():
+                spawn = game_rooms[room].get_random_spawn()
+                bot_id = f"bot_{len([p for p in game_rooms[room].players.values() if p.get('is_bot', False)])}"
+                bot_name = game_rooms[room].bot_names[len([p for p in game_rooms[room].players.values() if p.get('is_bot', False)]) % len(game_rooms[room].bot_names)]
+
+                game_rooms[room].players[bot_id] = {
+                    'username': bot_name,
+                    'x': spawn['x'],
+                    'y': spawn['y'],
+                    'rotation': 0,
+                    'health': 100,
+                    'weapon': 'pistol',
+                    'is_bot': True
+                }
+
                 emit('bot_added', {
                     'players': [{'username': p['username'], 'isBot': p.get('is_bot', False)}
                                for p in game_rooms[room].players.values()]
@@ -194,7 +232,8 @@ def handle_connect():
     emit('lobby_update', {
         'players': [{'username': p['username'], 'isBot': p.get('is_bot', False)}
                    for p in game_rooms[room].players.values()],
-        'countdown_started': game_rooms[room].countdown_started
+        'countdown_started': game_rooms[room].countdown_started,
+        'countdown': game_rooms[room].countdown_time if game_rooms[room].countdown_started else None
     }, room=room)
 
 @socketio.on('disconnect')

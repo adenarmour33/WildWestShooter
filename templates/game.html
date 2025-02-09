@@ -16,7 +16,7 @@
         <canvas id="minimap" width="150" height="150"></canvas>
 
         <!-- Admin Panel - Only show for admin users -->
-        {% if session.get('is_admin', False) and not session.get('is_guest', False) %}
+        {% if session.get('is_admin') %}
         <div class="admin-panel">
             <button class="admin-toggle" onclick="toggleAdminPanel()">
                 <span class="action-icon">⚙️</span>

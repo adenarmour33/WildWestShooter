@@ -1,6 +1,11 @@
 // Game setup
 let canvas, ctx, socket;
 let tileSize = 32;
+let lastUpdate = 0;
+const UPDATE_INTERVAL = 1000 / 60; // 60fps target
+const NETWORK_UPDATE_INTERVAL = 50; // Send updates every 50ms
+let lastNetworkUpdate = 0;
+
 let assets = {
     tiles: {
         grass: new Image(),
@@ -21,6 +26,11 @@ assets.tiles.grass.src = '/static/assets/tiles/grass.svg';
 assets.tiles.sand.src = '/static/assets/tiles/sand.svg';
 assets.tiles.tree.src = '/static/assets/tiles/tree.svg';
 assets.player.src = '/static/assets/player.svg';
+assets.weapons.pistol.src = '/static/assets/weapons/pistol.svg';
+assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.svg';
+assets.weapons.smg.src = '/static/assets/weapons/smg.svg';
+assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
+
 
 // Initialize game after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -29,7 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.error('Canvas element not found');
         return;
     }
-
     ctx = canvas.getContext('2d');
     socket = io();
 
@@ -53,19 +62,16 @@ document.addEventListener('DOMContentLoaded', () => {
             this.damage = damage;
             this.weapon = weapon;
             this.shooter = shooter;
-            this.lifetime = 2000; // 2 seconds lifetime
+            this.lifetime = 2000;
             this.spawnTime = Date.now();
             this.active = true;
         }
 
-        update() {
+        update(deltaTime) {
             if (!this.active) return;
-
-            // Move bullet
-            this.x += Math.cos(this.angle) * this.speed;
-            this.y += Math.sin(this.angle) * this.speed;
-
-            // Check lifetime
+            const movement = this.speed * (deltaTime / 16.67); // Normalize for 60fps
+            this.x += Math.cos(this.angle) * movement;
+            this.y += Math.sin(this.angle) * movement;
             if (Date.now() - this.spawnTime > this.lifetime) {
                 this.active = false;
             }
@@ -112,11 +118,15 @@ document.addEventListener('DOMContentLoaded', () => {
         y: 0,
         width: canvas.width,
         height: canvas.height,
-        update: function() {
-            this.x = player.x - canvas.width/2;
-            this.y = player.y - canvas.height/2;
-            this.x = Math.max(0, Math.min(this.x, map.width * tileSize - canvas.width));
-            this.y = Math.max(0, Math.min(this.y, map.height * tileSize - canvas.height));
+        followTarget: function(target, smooth = 0.1) {
+            const targetX = target.x - this.width/2;
+            const targetY = target.y - this.height/2;
+
+            this.x += (targetX - this.x) * smooth;
+            this.y += (targetY - this.y) * smooth;
+
+            this.x = Math.max(0, Math.min(this.x, map.width * tileSize - this.width));
+            this.y = Math.max(0, Math.min(this.y, map.height * tileSize - this.height));
         }
     };
 
@@ -141,6 +151,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function resizeCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+        camera.width = canvas.width;
+        camera.height = canvas.height;
     }
 
     window.addEventListener('resize', resizeCanvas);
@@ -276,7 +288,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const spread = (Math.random() - 0.5) * weapon.spread;
                 const angle = player.rotation + spread;
 
-                // Create bullet with offset from player center
                 const bulletX = player.x + PLAYER_SIZE/2 + Math.cos(angle) * PLAYER_SIZE;
                 const bulletY = player.y + PLAYER_SIZE/2 + Math.sin(angle) * PLAYER_SIZE;
 
@@ -316,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function update() {
+    function update(deltaTime) {
         // Update player movement
         player.velX = 0;
         player.velY = 0;
@@ -332,30 +343,41 @@ document.addEventListener('DOMContentLoaded', () => {
             player.velY *= 0.707;
         }
 
-        // Update player position
-        player.x = Math.max(0, Math.min(map.width * tileSize - PLAYER_SIZE, player.x + player.velX));
-        player.y = Math.max(0, Math.min(map.height * tileSize - PLAYER_SIZE, player.y + player.velY));
+        // Scale movement by deltaTime
+        const timeScale = deltaTime / 16.67; // Normalize for 60fps
+        player.x += player.velX * timeScale;
+        player.y += player.velY * timeScale;
 
-        // Update bullets
+        // Clamp player position
+        player.x = Math.max(0, Math.min(map.width * tileSize - PLAYER_SIZE, player.x));
+        player.y = Math.max(0, Math.min(map.height * tileSize - PLAYER_SIZE, player.y));
+
+        // Update bullets with deltaTime
         gameState.localBullets = gameState.localBullets.filter(bullet => {
-            bullet.update();
+            bullet.update(deltaTime);
             return bullet.active;
         });
 
-        // Send player update to server
-        socket.emit('player_update', {
-            x: player.x,
-            y: player.y,
-            rotation: player.rotation,
-            health: player.health,
-            weapon: player.currentWeapon
-        });
-        updateMinimap();
+        // Update camera with smooth following
+        camera.followTarget(player, 0.1);
+
+        // Network updates at fixed interval
+        const now = Date.now();
+        if (now - lastNetworkUpdate >= NETWORK_UPDATE_INTERVAL) {
+            socket.emit('player_update', {
+                x: player.x,
+                y: player.y,
+                rotation: player.rotation,
+                health: player.health,
+                weapon: player.currentWeapon
+            });
+            lastNetworkUpdate = now;
+            updateMinimap();
+        }
     }
 
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        camera.update();
 
         // Draw map tiles
         const startCol = Math.floor(camera.x / tileSize);
@@ -419,8 +441,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function gameLoop() {
-        update();
+    let lastTimestamp = 0;
+    function gameLoop(timestamp) {
+        const deltaTime = timestamp - lastTimestamp;
+        lastTimestamp = timestamp;
+
+        if (deltaTime < 1000) { // Skip large time gaps (e.g., tab switching)
+            update(deltaTime);
+        }
         draw();
         requestAnimationFrame(gameLoop);
     }
@@ -456,18 +484,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!minimapCtx) return;
 
         minimapCtx.clearRect(0, 0, 150, 150);
-
-        // Draw map boundary
         minimapCtx.fillStyle = 'rgba(0, 255, 0, 0.1)';
         minimapCtx.fillRect(0, 0, 150, 150);
 
-        // Draw player
         const playerX = (player.x / (map.width * tileSize)) * 150;
         const playerY = (player.y / (map.height * tileSize)) * 150;
         minimapCtx.fillStyle = '#e74c3c';
         minimapCtx.fillRect(playerX - 2, playerY - 2, 4, 4);
 
-        // Draw other players
         minimapCtx.fillStyle = '#3498db';
         Object.values(gameState.players).forEach(p => {
             const x = (p.x / (map.width * tileSize)) * 150;
@@ -477,5 +501,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateUI();
-    gameLoop();
+    requestAnimationFrame(gameLoop);
 });
+
+let joystick = {
+    base: document.getElementById('joystickBase'),
+    stick: document.getElementById('joystickStick'),
+    active: false,
+    baseX: 0,
+    baseY: 0,
+    deltaX: 0,
+    deltaY: 0
+};

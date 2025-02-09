@@ -1,3 +1,39 @@
+const style = document.createElement('style');
+style.textContent = `
+    .admin-panel {
+        position: fixed;
+        top: 20px;
+        right: -200px; /* Start hidden */
+        width: 200px;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 15px;
+        border-radius: 10px 0 0 10px;
+        transition: right 0.3s ease;
+        z-index: 1000;
+    }
+
+    .admin-panel.active {
+        right: 0;
+    }
+
+    .admin-toggle {
+        position: absolute;
+        left: -40px;
+        top: 0;
+        width: 40px;
+        height: 40px;
+        background: rgba(0, 0, 0, 0.8);
+        border: none;
+        border-radius: 10px 0 0 10px;
+        cursor: pointer;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+`;
+document.head.appendChild(style);
+
 function executeAdminCommand(command) {
     const playerList = document.getElementById('playerList');
     const selectedPlayer = playerList.value;
@@ -654,25 +690,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (gameState.isAdmin) {
             const killButton = document.createElement('button');
             killButton.textContent = 'Instant Kill';
-            killButton.className = 'btn btn-danger mb-2';
+            killButton.className = 'btn btn-danger mb-2 w-100';
             killButton.onclick = () => executeAdminCommand('kill');
             adminPanel.appendChild(killButton);
 
             const godModeButton = document.createElement('button');
             godModeButton.textContent = 'Toggle God Mode';
-            godModeButton.className = 'btn btn-warning mb-2';
+            godModeButton.className = 'btn btn-warning mb-2 w-100';
             godModeButton.onclick = () => executeAdminCommand('god');
             adminPanel.appendChild(godModeButton);
 
             const modButton = document.createElement('button');
             modButton.textContent = 'Toggle Moderator';
-            modButton.className = 'btn btn-info mb-2';
+            modButton.className = 'btn btn-info mb-2 w-100';
             modButton.onclick = () => executeAdminCommand('mod');
             adminPanel.appendChild(modButton);
 
             const banButton = document.createElement('button');
             banButton.textContent = 'Ban Player';
-            banButton.className = 'btn btn-danger mb-2';
+            banButton.className = 'btn btn-danger mb-2 w-100';
             banButton.onclick = () => executeAdminCommand('ban');
             adminPanel.appendChild(banButton);
         }
@@ -680,25 +716,25 @@ document.addEventListener('DOMContentLoaded', () => {
         // Buttons for both admins and moderators
         const kickButton = document.createElement('button');
         kickButton.textContent = 'Kick Player';
-        kickButton.className = 'btn btn-warning mb-2';
+        kickButton.className = 'btn btn-warning mb-2 w-100';
         kickButton.onclick = () => executeAdminCommand('kick');
         adminPanel.appendChild(kickButton);
 
         const muteButton = document.createElement('button');
         muteButton.textContent = 'Mute Player';
-        muteButton.className = 'btn btn-secondary mb-2';
+        muteButton.className = 'btn btn-secondary mb-2 w-100';
         muteButton.onclick = () => executeAdminCommand('mute');
         adminPanel.appendChild(muteButton);
 
-        const playerList = document.createElement('select');
-        playerList.id = 'playerList';
-        playerList.className = 'form-select mb-2';
-        playerList.innerHTML = '<option value="">Select Player</option>';
-        adminPanel.appendChild(playerList);
+        const playerListSelect = document.createElement('select');
+        playerListSelect.id = 'playerList';
+        playerListSelect.className = 'form-select mb-2';
+        playerListSelect.innerHTML = '<option value="">Select Player</option>';
+        adminPanel.appendChild(playerListSelect);
 
         const adminToggle = document.createElement('button');
         adminToggle.className = 'admin-toggle';
-        adminToggle.onclick = () => toggleAdminPanel();
+        adminToggle.onclick = toggleAdminPanel;
         adminToggle.innerHTML = '<span class="action-icon">⚙️</span>';
         adminPanel.appendChild(adminToggle);
 

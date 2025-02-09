@@ -773,18 +773,16 @@ document.addEventListener('DOMContentLoaded', () => {
             b.x, b.y, b.angle, BULLET_SPEED, b.damage, b.weapon, b.shooter
         ));
         gameState.scores = state.scores;
+        gameState.chatMessages = state.chat_messages;
 
-        // Only update admin status if it changed
-        if (gameState.isAdmin !== state.is_admin) {
+        // Preserve admin status from initial page load
+        if (!gameState.hasOwnProperty('isAdmin')) {
             gameState.isAdmin = state.is_admin;
             gameState.isModerator = state.is_moderator;
 
-            // Handle admin panel visibility
-            const existingPanel = document.querySelector('.admin-panel');
-            if (state.is_admin && !existingPanel) {
+            // Create admin panel only on first state update if admin
+            if (state.is_admin && !document.querySelector('.admin-panel')) {
                 createAdminPanel();
-            } else if (!state.is_admin && existingPanel) {
-                existingPanel.remove();
             }
         }
 

@@ -304,7 +304,8 @@ def handle_connect():
         'room': room,
         'spawn': spawn,
         'is_guest': session.get('is_guest', False),
-        'is_admin': is_admin
+        'is_admin': is_admin,
+        'is_moderator': session.get('is_moderator', False)
     }
 
     # Show help message with available commands
@@ -316,7 +317,8 @@ def handle_connect():
         'bullets': game_rooms[room].bullets,
         'scores': game_rooms[room].scores,
         'chat_messages': game_rooms[room].chat_messages,
-        'is_admin': is_admin
+        'is_admin': is_admin,
+        'is_moderator': session.get('is_moderator', False)
     }, room=request.sid)
 
 @socketio.on('disconnect')

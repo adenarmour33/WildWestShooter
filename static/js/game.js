@@ -16,15 +16,11 @@ let assets = {
     }
 };
 
-// Load assets
-assets.tiles.grass.src = '/static/assets/tiles/grass.png';
-assets.tiles.sand.src = '/static/assets/tiles/sand.png';
-assets.tiles.tree.src = '/static/assets/tiles/tree.png';
-assets.player.src = '/static/assets/player.png';
-assets.weapons.pistol.src = '/static/assets/weapons/pistol.png';
-assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.png';
-assets.weapons.smg.src = '/static/assets/weapons/smg.png';
-assets.weapons.knife.src = '/static/assets/weapons/knife.png';
+// Load assets with SVG paths
+assets.tiles.grass.src = '/static/assets/tiles/grass.svg';
+assets.tiles.sand.src = '/static/assets/tiles/sand.svg';
+assets.tiles.tree.src = '/static/assets/tiles/tree.svg';
+assets.player.src = '/static/assets/player.svg';
 
 // Initialize game after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -48,7 +44,6 @@ document.addEventListener('DOMContentLoaded', () => {
         knife: { damage: 35, fireRate: 500, range: 50 }
     };
 
-    // Add bullet class definition after WEAPONS constant
     class Bullet {
         constructor(x, y, angle, speed, damage, weapon, shooter) {
             this.x = x;
@@ -61,9 +56,15 @@ document.addEventListener('DOMContentLoaded', () => {
             this.lifetime = 2000; // 2 seconds lifetime
             this.spawnTime = Date.now();
             this.active = true;
+
+            // Set initial position offset from player
+            this.x += Math.cos(angle) * PLAYER_SIZE;
+            this.y += Math.sin(angle) * PLAYER_SIZE;
         }
 
         update() {
+            if (!this.active) return;
+
             // Move bullet
             this.x += Math.cos(this.angle) * this.speed;
             this.y += Math.sin(this.angle) * this.speed;
@@ -99,7 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     map.generateTiles();
 
-    // Game state
     let player = {
         x: Math.random() * (map.width * tileSize - PLAYER_SIZE),
         y: Math.random() * (map.height * tileSize - PLAYER_SIZE),
@@ -120,7 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Camera
     let camera = {
         x: 0,
         y: 0,
@@ -137,14 +136,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Modify gameState to include local bullets
     let gameState = {
         players: {},
         bullets: [],
-        localBullets: [] // Add this line for client-side bullet tracking
+        localBullets: []
     };
 
-    // Mobile controls state
     let joystick = {
         active: false,
         baseX: 0,
@@ -157,7 +154,6 @@ document.addEventListener('DOMContentLoaded', () => {
         stick: document.querySelector('.joystick-stick')
     };
 
-    // UI elements
     const healthBar = document.querySelector('.health-fill');
     const healthText = document.querySelector('.health-text');
     const ammoCounter = document.getElementById('ammoCounter');
@@ -167,7 +163,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const minimap = document.getElementById('minimap');
     const minimapCtx = minimap ? minimap.getContext('2d') : null;
 
-    // Set canvas size
     function resizeCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
@@ -176,12 +171,10 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // Input handling
     const keys = {};
     let mouseX = 0;
     let mouseY = 0;
 
-    // Keyboard controls
     document.addEventListener('keydown', (e) => {
         keys[e.key.toLowerCase()] = true;
         if(['1', '2', '3', '4'].includes(e.key)) {
@@ -197,7 +190,6 @@ document.addEventListener('DOMContentLoaded', () => {
         keys[e.key.toLowerCase()] = false;
     });
 
-    // Mouse controls
     canvas.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
         mouseX = e.clientX - rect.left;
@@ -207,7 +199,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     canvas.addEventListener('mousedown', shoot);
 
-    // Touch controls
     if (joystickContainer) {
         joystickContainer.addEventListener('touchstart', handleJoystickStart, { passive: false });
         joystickContainer.addEventListener('touchmove', handleJoystickMove, { passive: false });
@@ -287,7 +278,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Update the shoot function
     function shoot() {
         const now = Date.now();
         const weapon = WEAPONS[player.currentWeapon];
@@ -311,10 +301,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const spread = (Math.random() - 0.5) * weapon.spread;
                 const angle = player.rotation + spread;
 
-                // Create local bullet
                 const bullet = new Bullet(
-                    player.x + PLAYER_SIZE/2 + Math.cos(angle) * PLAYER_SIZE,
-                    player.y + PLAYER_SIZE/2 + Math.sin(angle) * PLAYER_SIZE,
+                    player.x + PLAYER_SIZE/2,
+                    player.y + PLAYER_SIZE/2,
                     angle,
                     BULLET_SPEED,
                     weapon.damage,
@@ -323,7 +312,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
                 gameState.localBullets.push(bullet);
 
-                // Emit to server
                 socket.emit('player_shoot', {
                     x: bullet.x,
                     y: bullet.y,
@@ -373,7 +361,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Update the update function to include bullet updates
     function update() {
         const moveSpeed = keys['shift'] ? PLAYER_SPEED * 1.5 : PLAYER_SPEED;
 
@@ -417,11 +404,8 @@ document.addEventListener('DOMContentLoaded', () => {
         updateMinimap();
     }
 
-    // Update the draw function's bullet rendering
     function draw() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Update camera
         camera.update();
 
         // Draw map
@@ -446,39 +430,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Draw other players
-        Object.values(gameState.players).forEach(p => {
-            const screenX = p.x - camera.x;
-            const screenY = p.y - camera.y;
-
-            ctx.save();
-            ctx.translate(screenX + PLAYER_SIZE/2, screenY + PLAYER_SIZE/2);
-            ctx.rotate(p.rotation);
-            ctx.drawImage(assets.player, 
-                         0, 0, 32, 32,
-                         -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
-            ctx.restore();
-
-            // Draw username
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(p.username, screenX + PLAYER_SIZE/2, screenY - 10);
-        });
-
-        // Draw player
-        ctx.save();
-        ctx.translate(player.x - camera.x + PLAYER_SIZE/2, player.y - camera.y + PLAYER_SIZE/2);
-        ctx.rotate(player.rotation);
-        ctx.drawImage(assets.player,
-                     player.sprite.frameX * player.sprite.width, 
-                     player.sprite.frameY * player.sprite.height,
-                     player.sprite.width, player.sprite.height,
-                     -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
-        ctx.restore();
-
         // Draw bullets
         const drawBullet = (bullet) => {
+            if (!bullet.active) return;
+
             const screenX = bullet.x - camera.x;
             const screenY = bullet.y - camera.y;
 
@@ -491,6 +446,30 @@ document.addEventListener('DOMContentLoaded', () => {
         // Draw both local and server bullets
         gameState.localBullets.forEach(drawBullet);
         gameState.bullets.forEach(drawBullet);
+
+        // Draw other players
+        Object.values(gameState.players).forEach(p => {
+            const screenX = p.x - camera.x;
+            const screenY = p.y - camera.y;
+
+            ctx.save();
+            ctx.translate(screenX + PLAYER_SIZE/2, screenY + PLAYER_SIZE/2);
+            ctx.rotate(p.rotation);
+            ctx.drawImage(assets.player, -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
+            ctx.restore();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(p.username, screenX + PLAYER_SIZE/2, screenY - 10);
+        });
+
+        // Draw player
+        ctx.save();
+        ctx.translate(player.x - camera.x + PLAYER_SIZE/2, player.y - camera.y + PLAYER_SIZE/2);
+        ctx.rotate(player.rotation);
+        ctx.drawImage(assets.player, -PLAYER_SIZE/2, -PLAYER_SIZE/2, PLAYER_SIZE, PLAYER_SIZE);
+        ctx.restore();
     }
 
     function gameLoop() {
@@ -504,7 +483,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Connected to server');
     });
 
-    // Update socket event for game state
     socket.on('game_state', (state) => {
         gameState.players = state.players;
         gameState.bullets = state.bullets.map(b => new Bullet(
@@ -528,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`${data.username} left the game`);
     });
 
-    // Initialize UI and start game
+
     updateUI();
     gameLoop();
 });

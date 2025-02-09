@@ -1,34 +1,76 @@
-// Game setup
+// Game setup and global variables
 let canvas, ctx, socket;
 let tileSize = 32;
 let lastUpdate = 0;
 const UPDATE_INTERVAL = 1000 / 60; // 60fps target
 const NETWORK_UPDATE_INTERVAL = 50; // Send updates every 50ms
 let lastNetworkUpdate = 0;
-let assets = {
-    tiles: {
-        grass: new Image(),
-        sand: new Image(),
-        tree: new Image()
-    },
-    player: new Image(),
-    weapons: {
-        pistol: new Image(),
-        shotgun: new Image(),
-        smg: new Image(),
-        knife: new Image()
-    }
+
+// Initialize gameState globally
+let gameState = {
+    players: {},
+    bullets: [],
+    localBullets: [],
+    scores: {},
+    isAdmin: false,
+    isModerator: false,
+    chatMessages: [],
+    userId: null,  // Store the current user's ID
+    adminIds: new Set()  // Store admin user IDs
 };
 
-// Load assets with SVG paths
-assets.tiles.grass.src = '/static/assets/tiles/grass.svg';
-assets.tiles.sand.src = '/static/assets/tiles/sand.svg';
-assets.tiles.tree.src = '/static/assets/tiles/tree.svg';
-assets.player.src = '/static/assets/player.svg';
-assets.weapons.pistol.src = '/static/assets/weapons/pistol.svg';
-assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.svg';
-assets.weapons.smg.src = '/static/assets/weapons/smg.svg';
-assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
+// Command processing function
+function processCommand(command) {
+    // Remove the leading slash if present
+    const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
+
+    if (cmd === 'help') {
+        return `Available commands:
+        /help - Show this help message
+        /kill <player_id> - Admin only: Kill specified player
+        /god <player_id> - Admin only: Toggle god mode for player
+        /kick <player_id> - Mod only: Kick player from game
+        /mute <player_id> <duration> - Mod only: Mute player
+        /ban <player_id> - Admin only: Ban player`;
+    }
+
+    const [action, ...args] = cmd.split(' ');
+    const targetId = args[0];  // First argument is now the player ID
+
+    // Check if user is authenticated
+    if (!gameState.userId) {
+        return 'Error: You must be logged in to use commands.';
+    }
+
+    // Check permissions and execute command
+    switch(action) {
+        case 'kill':
+        case 'god':
+        case 'ban':
+            if (!gameState.isAdmin) {
+                return 'You do not have permission to use this command.';
+            }
+            if (!targetId) {
+                return `${action} command requires a player ID.`;
+            }
+            executeAdminCommand(action, targetId);
+            return `Executing ${action} command on player ${targetId}`;
+
+        case 'kick':
+        case 'mute':
+            if (!gameState.isAdmin && !gameState.isModerator) {
+                return 'You do not have permission to use this command.';
+            }
+            if (!targetId) {
+                return `${action} command requires a player ID.`;
+            }
+            executeAdminCommand(action, targetId);
+            return `Executing ${action} command on player ${targetId}`;
+
+        default:
+            return 'Unknown command. Type /help for available commands.';
+    }
+}
 
 function executeAdminCommand(command, targetId) {
     // Check if target exists in players
@@ -102,134 +144,31 @@ function executeAdminCommand(command, targetId) {
     }
 }
 
-function toggleAdminPanel() {
-    console.log('Toggling admin panel');
-    const panel = document.querySelector('.admin-panel');
-    if (panel) {
-        panel.classList.toggle('active');
+// Asset loading
+let assets = {
+    tiles: {
+        grass: new Image(),
+        sand: new Image(),
+        tree: new Image()
+    },
+    player: new Image(),
+    weapons: {
+        pistol: new Image(),
+        shotgun: new Image(),
+        smg: new Image(),
+        knife: new Image()
     }
-}
+};
 
-function createAdminPanel() {
-    console.log('Creating admin panel');
-
-    // Don't create if it already exists
-    if (document.querySelector('.admin-panel')) {
-        console.log('Admin panel already exists');
-        return;
-    }
-
-    // Remove any existing styles first
-    const existingStyle = document.querySelector('#admin-panel-styles');
-    if (existingStyle) {
-        existingStyle.remove();
-    }
-
-    // Create and inject styles first
-    const style = document.createElement('style');
-    style.id = 'admin-panel-styles';
-    style.textContent = `
-        .admin-toggle {
-            position: fixed;
-            top: 20px;
-            left: 20px !important;
-            width: 40px;
-            height: 40px;
-            background: rgba(0, 0, 0, 0.8);
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 2000;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            pointer-events: all;
-        }
-
-        .admin-panel {
-            position: fixed;
-            top: 20px;
-            left: -200px;
-            width: 200px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 10px;
-            transition: left 0.3s ease;
-            z-index: 1999;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            pointer-events: all;
-        }
-
-        .admin-panel.active {
-            left: 70px;
-        }
-    `;
-    document.head.appendChild(style);
-    console.log('Admin styles injected');
-
-    // Create toggle button first (separate from panel)
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'admin-toggle';
-    toggleBtn.innerHTML = '<span class="action-icon">⚙️</span>';
-    toggleBtn.style.left = '20px';
-    toggleBtn.style.right = 'auto';
-    toggleBtn.addEventListener('click', function(e) {
-        console.log('Toggle button clicked');
-        e.preventDefault();
-        e.stopPropagation();
-        toggleAdminPanel();
-    });
-    document.body.appendChild(toggleBtn);
-    console.log('Toggle button created');
-
-    // Create panel
-    const adminPanel = document.createElement('div');
-    adminPanel.className = 'admin-panel';
-    adminPanel.style.pointerEvents = 'all';
-
-    // Add content to panel
-    const playerList = document.createElement('select');
-    playerList.id = 'playerList';
-    playerList.className = 'form-select mb-2';
-    playerList.innerHTML = '<option value="">Select Player</option>';
-    adminPanel.appendChild(playerList);
-
-    // Add buttons based on permissions
-    if (gameState.isAdmin) {
-        const adminButtons = [
-            { text: 'Instant Kill', command: 'kill', class: 'btn-danger' },
-            { text: 'Toggle God Mode', command: 'god', class: 'btn-warning' },
-            { text: 'Toggle Moderator', command: 'mod', class: 'btn-info' },
-            { text: 'Ban Player', command: 'ban', class: 'btn-danger' }
-        ];
-
-        adminButtons.forEach(btn => {
-            const button = document.createElement('button');
-            button.textContent = btn.text;
-            button.className = `btn ${btn.class} mb-2 w-100`;
-            button.onclick = () => executeAdminCommand(btn.command, playerList.value);
-            adminPanel.appendChild(button);
-        });
-    }
-
-    const modButtons = [
-        { text: 'Kick Player', command: 'kick', class: 'btn-warning' },
-        { text: 'Mute Player', command: 'mute', class: 'btn-secondary' }
-    ];
-
-    modButtons.forEach(btn => {
-        const button = document.createElement('button');
-        button.textContent = btn.text;
-        button.className = `btn ${btn.class} mb-2 w-100`;
-        button.onclick = () => executeAdminCommand(btn.command, playerList.value);
-        adminPanel.appendChild(button);
-    });
-
-    document.body.appendChild(adminPanel);
-    console.log('Admin panel added to document');
-}
+// Load assets with SVG paths
+assets.tiles.grass.src = '/static/assets/tiles/grass.svg';
+assets.tiles.sand.src = '/static/assets/tiles/sand.svg';
+assets.tiles.tree.src = '/static/assets/tiles/tree.svg';
+assets.player.src = '/static/assets/player.svg';
+assets.weapons.pistol.src = '/static/assets/weapons/pistol.svg';
+assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.svg';
+assets.weapons.smg.src = '/static/assets/weapons/smg.svg';
+assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
 
 // Initialize game after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -237,19 +176,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize socket first
     socket = io();
-
-    // Initialize gameState at the start
-    let gameState = {
-        players: {},
-        bullets: [],
-        localBullets: [],
-        scores: {},
-        isAdmin: false,
-        isModerator: false,
-        chatMessages: [],
-        userId: null,  // Store the current user's ID
-        adminIds: new Set()  // Store admin user IDs
-    };
 
     // Create chat UI function
     function createChatUI() {
@@ -422,111 +348,10 @@ document.addEventListener('DOMContentLoaded', () => {
         return { cmdContainer, cmdInput };
     }
 
-    // Command processing function
-    function processCommand(command) {
-        // Remove the leading slash if present
-        const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
-
-        if (cmd === 'help') {
-            return `Available commands:
-            /help - Show this help message
-            /kill <player_id> - Admin only: Kill specified player
-            /god <player_id> - Admin only: Toggle god mode for player
-            /kick <player_id> - Mod only: Kick player from game
-            /mute <player_id> <duration> - Mod only: Mute player
-            /ban <player_id> - Admin only: Ban player`;
-        }
-
-        const [action, ...args] = cmd.split(' ');
-        const targetId = args[0];  // First argument is now the player ID
-
-        // Check if user is authenticated
-        if (!gameState.userId) {
-            return 'Error: You must be logged in to use commands.';
-        }
-
-        // Check permissions and execute command
-        switch(action) {
-            case 'kill':
-            case 'god':
-            case 'ban':
-                if (!gameState.isAdmin) {
-                    return 'You do not have permission to use this command.';
-                }
-                if (!targetId) {
-                    return `${action} command requires a player ID.`;
-                }
-                executeAdminCommand(action, targetId);
-                return `Executing ${action} command on player ${targetId}`;
-
-            case 'kick':
-            case 'mute':
-                if (!gameState.isAdmin && !gameState.isModerator) {
-                    return 'You do not have permission to use this command.';
-                }
-                if (!targetId) {
-                    return `${action} command requires a player ID.`;
-                }
-                executeAdminCommand(action, targetId);
-                return `Executing ${action} command on player ${targetId}`;
-
-            default:
-                return 'Unknown command. Type /help for available commands.';
-        }
-    }
-
     // Initialize interfaces
     const chatUI = createChatUI();
     const { cmdContainer, cmdInput } = createCommandLine();
 
-    // Socket event handlers
-    socket.on('connect', () => {
-        console.log('Connected to server');
-        socket.emit('authenticate');
-    });
-
-    socket.on('authentication_response', (data) => {
-        console.log('Authentication response:', data);
-        if (data.user_id) {
-            gameState.userId = data.user_id;
-            gameState.isAdmin = data.is_admin || false;
-            gameState.isModerator = data.is_moderator || false;
-            console.log('User authenticated:', {
-                userId: gameState.userId,
-                isAdmin: gameState.isAdmin,
-                isModerator: gameState.isModerator
-            });
-
-            if (gameState.isAdmin) {
-                createAdminPanel();
-            }
-        }
-    });
-
-    socket.on('chat_message', (data) => {
-        if (!chatUI.chatMessages) return;
-
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'chat-message';
-
-        const timestamp = new Date().toLocaleTimeString();
-        messageDiv.innerHTML = `
-            <span class="chat-timestamp">[${timestamp}]</span>
-            <span class="chat-username">${data.username}:</span>
-            <span class="chat-text">${data.message}</span>
-        `;
-
-        chatUI.chatMessages.appendChild(messageDiv);
-        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
-    });
-
-
-    canvas = document.getElementById('gameCanvas');
-    if (!canvas) {
-        console.error('Canvas element not found');
-        return;
-    }
-    ctx = canvas.getContext('2d');
     //socket = io(); // Socket initialization moved to the top
 
     // Game constants
@@ -922,7 +747,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function draw() {
-        ctx.clearRect(0, 0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         // Draw map tiles
         const startCol = Math.floor(camera.x / tileSize);
@@ -1042,58 +867,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-
-    function processCommand(command) {
-        // Remove the leading slash if present
-        const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
-
-        if (cmd === 'help') {
-            return `Available commands:
-            /help - Show this help message
-            /kill <player_id> - Admin only: Kill specified player
-            /god <player_id> - Admin only: Toggle god mode for player
-            /kick <player_id> - Mod only: Kick player from game
-            /mute <player_id> <duration> - Mod only: Mute player
-            /ban <player_id> - Admin only: Ban player`;
-        }
-
-        const [action, ...args] = cmd.split(' ');
-        const targetId = args[0];  // First argument is now the player ID
-
-        // Check if user is authenticated
-        if (!gameState.userId) {
-            return 'Error: You must be logged in to use commands.';
-        }
-
-        // Check permissions and execute command
-        switch(action) {
-            case 'kill':
-            case 'god':
-            case 'ban':
-                if (!gameState.isAdmin) {
-                    return 'You do not have permission to use this command.';
-                }
-                if (!targetId) {
-                    return `${action} command requires a player ID.`;
-                }
-                executeAdminCommand(action, targetId);
-                return `Executing ${action} command on player ${targetId}`;
-
-            case 'kick':
-            case 'mute':
-                if (!gameState.isAdmin && !gameState.isModerator) {
-                    return 'You do not have permission to use this command.';
-                }
-                if (!targetId) {
-                    return `${action} command requires a player ID.`;
-                }
-                executeAdminCommand(action, targetId);
-                return `Executing ${action} command on player ${targetId}`;
-
-            default:
-                return 'Unknown command. Type /help for available commands.';
-        }
-    }
 
     socket.on('game_state', (state) => {
         console.log('Received game state:', state);
@@ -1245,6 +1018,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Socket events for chat
+    socket.on('chat_message', (data) => {
+        if (!chatUI.chatMessages) return;
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'chat-message';
+
+        const timestamp = new Date().toLocaleTimeString();
+        messageDiv.innerHTML = `
+            <span class="chat-timestamp">[${timestamp}]</span>
+            <span class="chat-username">${data.username}:</span>
+            <span class="chat-text">${data.message}</span>
+        `;
+
+        chatUI.chatMessages.appendChild(messageDiv);
+        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
+    });
 
     // Update socket events for admin commands
     socket.on('admin_command_result', (data) => {
@@ -1267,6 +1056,13 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.removeChild(resultElement);
         }, 3000);
     });
+
+    canvas = document.getElementById('gameCanvas');
+    if (!canvas) {
+        console.error('Canvas element not found');
+        return;
+    }
+    ctx = canvas.getContext('2d');
 
     // Start the game loop
     requestAnimationFrame(gameLoop);

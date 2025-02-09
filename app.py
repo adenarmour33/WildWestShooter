@@ -534,10 +534,65 @@ def handle_player_hit(data):
 
 @socketio.on('admin_command')
 def handle_admin_command(data):
-    if request.sid in player_states and (session.get('is_admin') or session.get('is_moderator')):
+    logging.debug(f"Received admin command: {data}")
+    if request.sid in player_states:
         room = player_states[request.sid]['room']
         command = data.get('command')
         target_id = data.get('target_id')
+        logging.debug(f"Processing command {command} for target {target_id}")
+
+        # Log authentication status
+        is_admin = session.get('is_admin', False)
+        is_moderator = session.get('is_moderator', False)
+        logging.debug(f"User authentication - Admin: {is_admin}, Moderator: {is_moderator}")
+
+        if not is_admin and not is_moderator:
+            logging.debug("Command rejected - User lacks required permissions")
+            emit('admin_command_result', {
+                'success': False,
+                'error': 'Insufficient permissions'
+            }, room=request.sid)
+            return
+
+        if command == 'kill':
+            if not is_admin:
+                emit('admin_command_result', {
+                    'success': False,
+                    'error': 'Kill command requires admin privileges'
+                }, room=request.sid)
+                return
+
+            if target_id not in game_rooms[room].players:
+                logging.debug(f"Kill command failed - Target {target_id} not found")
+                emit('admin_command_result', {
+                    'success': False,
+                    'error': 'Target player not found'
+                }, room=request.sid)
+                return
+
+            logging.debug(f"Executing kill command on {target_id}")
+            # Update bot or player health
+            game_rooms[room].players[target_id]['health'] = 0
+
+            # Send game state update to all players
+            emit('game_state', {
+                'players': game_rooms[room].players,
+                'bullets': game_rooms[room].bullets,
+                'scores': game_rooms[room].scores,
+                'chat_messages': game_rooms[room].chat_messages
+            }, room=room)
+
+            # Send kill confirmation to client
+            emit('admin_command_result', {
+                'success': True,
+                'command': 'kill',
+                'target_id': target_id,
+                'message': f'Successfully killed player {target_id}'
+            }, room=request.sid)
+
+            # Notify target
+            emit('player_died', {'killer': request.sid}, room=target_id)
+            logging.debug(f"Kill command executed successfully on {target_id}")
 
         if command in ['kick', 'mute'] and target_id in player_states:
             target_user_id = player_states[target_id]['user_id']
@@ -554,20 +609,7 @@ def handle_admin_command(data):
                         emit('muted', {'duration': data.get('duration', 5)}, room=target_id)
 
         if session.get('is_admin'):
-            if command == 'kill' and target_id in game_rooms[room].players:
-                # Update bot or player health
-                game_rooms[room].players[target_id]['health'] = 0
-                # Send kill confirmation to client
-                emit('admin_command_result', {
-                    'success': True,
-                    'command': 'kill',
-                    'target_id': target_id,
-                    'message': f'Successfully killed player {target_id}'
-                }, room=request.sid)
-                # Notify target
-                emit('player_died', {'killer': request.sid}, room=target_id)
-
-            elif command == 'god_mode' and target_id in player_states:
+            if command == 'god_mode' and target_id in player_states:
                 target_user_id = player_states[target_id]['user_id']
                 if not target_user_id.startswith('guest_'):
                     user = User.query.get(target_user_id)
@@ -577,26 +619,6 @@ def handle_admin_command(data):
                         if target_id in game_rooms[room].players:
                             game_rooms[room].players[target_id]['godMode'] = user.god_mode
                             emit('god_mode_update', {'enabled': user.god_mode}, room=target_id)
-
-            elif command == 'make_moderator' and target_id in player_states:
-                target_user_id = player_states[target_id]['user_id']
-                if not target_user_id.startswith('guest_'):
-                    user = User.query.get(target_user_id)
-                    if user:
-                        user.is_moderator = not user.is_moderator
-                        db.session.commit()
-                        emit('moderator_status', {'is_moderator': user.is_moderator}, room=target_id)
-
-            elif command == 'ban_player' and target_id in player_states:
-                target_user_id = player_states[target_id]['user_id']
-                if not target_user_id.startswith('guest_'):
-                    user = User.query.get(target_user_id)
-                    if user:
-                        user.is_banned = True
-                        user.ban_reason = data.get('reason', 'Banned by admin')
-                        db.session.commit()
-                        emit('banned', {'reason': user.ban_reason}, room=target_id)
-                        disconnect(target_id)
 
 @socketio.on('get_player_info')
 def handle_get_player_info():

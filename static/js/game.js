@@ -278,8 +278,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatUI = createChatUI();
     const { cmdContainer, cmdInput } = createCommandLine();
 
-    // Command processing function
+    // Process command function
     function processCommand(command) {
+        console.log('Processing command:', command);
+
         // Remove the leading slash if present
         const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
 
@@ -289,50 +291,50 @@ document.addEventListener('DOMContentLoaded', () => {
             /kill <player_id> - Admin only: Kill specified player
             /god <player_id> - Admin only: Toggle god mode for player
             /kick <player_id> - Mod only: Kick player from game
-            /mute <player_id> <duration> - Mod only: Mute player
-            /ban <player_id> - Admin only: Ban player`;
+            /mute <player_id> <duration> - Mod only: Mute player`;
         }
 
         const [action, ...args] = cmd.split(' ');
-        const targetId = args[0];  // First argument is now the player ID
+        const targetId = args[0];
 
         // Check if user is authenticated
         if (!gameState.userId) {
+            console.log('Command rejected: User not authenticated');
             return 'Error: You must be logged in to use commands.';
         }
+
+        console.log('Command validation - User:', {
+            userId: gameState.userId,
+            isAdmin: gameState.isAdmin,
+            isModerator: gameState.isModerator
+        });
 
         // Check permissions and execute command
         switch(action) {
             case 'kill':
-            case 'god':
-            case 'ban':
                 if (!gameState.isAdmin) {
+                    console.log('Kill command rejected: User not admin');
                     return 'You do not have permission to use this command.';
                 }
                 if (!targetId) {
-                    return `${action} command requires a player ID.`;
+                    console.log('Kill command rejected: No target specified');
+                    return 'Kill command requires a player ID.';
                 }
+                console.log('Executing kill command on:', targetId);
                 executeAdminCommand(action, targetId);
-                return `Executing ${action} command on player ${targetId}`;
-
-            case 'kick':
-            case 'mute':
-                if (!gameState.isAdmin && !gameState.isModerator) {
-                    return 'You do not have permission to use this command.';
-                }
-                if (!targetId) {
-                    return `${action} command requires a player ID.`;
-                }
-                executeAdminCommand(action, targetId);
-                return `Executing ${action} command on player ${targetId}`;
+                return `Executing kill command on player ${targetId}`;
 
             default:
+                console.log('Unknown command:', action);
                 return 'Unknown command. Type /help for available commands.';
         }
     }
 
+
     // Update the executeAdminCommand function to handle responses
     function executeAdminCommand(command, targetId) {
+        console.log(`Executing admin command: ${command} on target: ${targetId}`);
+
         // Check if target exists in players
         if (!gameState.players[targetId]) {
             const resultElement = document.createElement('div');
@@ -355,12 +357,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         switch(command) {
             case 'kill':
-                socket.emit('admin_command', {
-                    command: 'kill',  // Changed from 'instant_kill' to match server expectation
+                console.log('Sending kill command:', {
+                    command: 'kill',
                     target_id: targetId,
                     admin_id: gameState.userId
                 });
-                console.log('Sent kill command:', {
+                socket.emit('admin_command', {
                     command: 'kill',
                     target_id: targetId,
                     admin_id: gameState.userId
@@ -851,29 +853,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 isAdmin: gameState.isAdmin,
                 isModerator: gameState.isModerator
             });
-
-            if (gameState.isAdmin) {
-                createAdminPanel();
-            }
         }
     });
 
 
     socket.on('game_state', (state) => {
         console.log('Received game state:', state);
-
-        // Store all relevant state information
         gameState.players = state.players || {};
         gameState.bullets = state.bullets || [];
         gameState.scores = state.scores || {};
         gameState.chatMessages = state.chat_messages || [];
-
-        // Update player list if admin panel exists
-        const playerList = document.getElementById('playerList');
-        if (playerList && Object.keys(gameState.players).length > 0) {
-            updatePlayerList();
-        }
-
         updateUI();
     });
 
@@ -908,7 +897,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter' && cmdInput.value.trim()) {
             const result = processCommand(cmdInput.value.trim());
             // Create a temporary message element to show the command result
-            const resultElement = document.createElement('div');
+            const resultElement = document.createElement('div);
             resultElement.style.cssText = `
                 position: fixed;
                 top: 50%;
@@ -969,20 +958,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (data.success) {
             resultElement.textContent = `Command executed successfully: ${data.message || ''}`;
-
-            // Update the player's state if it's a kill command
             if (data.command === 'kill' && data.target_id) {
+                console.log('Updating killed player state:', data.target_id);
                 if (gameState.players[data.target_id]) {
                     gameState.players[data.target_id].health = 0;
                     updateUI();
                 }
             }
         } else {
+            console.error('Command failed:', data.error);
             resultElement.textContent = `Command failed: ${data.error || 'Unknown error'}`;
         }
 
         document.body.appendChild(resultElement);
         setTimeout(() => document.body.removeChild(resultElement), 3000);
+    });
+
+    // Add handler for player_died event
+    socket.on('player_died', (data) => {
+        console.log('Player died event received:', data);
+        updateUI();
     });
 
     // Start the game loop

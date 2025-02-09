@@ -1,15 +1,6 @@
-function executeAdminCommand(command, targetPlayer) {
-    const playerList = document.getElementById('playerList');
-    let targetId = null;
-
-    // Find the player ID from gameState.players
-    Object.entries(gameState.players).forEach(([id, player]) => {
-        if (player.username.toLowerCase().includes(targetPlayer.toLowerCase())) {
-            targetId = id;
-        }
-    });
-
-    if (!targetId) {
+function executeAdminCommand(command, targetId) {
+    // Check if target exists in players
+    if (!gameState.players[targetId]) {
         const resultElement = document.createElement('div');
         resultElement.style.cssText = `
             position: fixed;
@@ -22,23 +13,25 @@ function executeAdminCommand(command, targetPlayer) {
             border-radius: 5px;
             z-index: 1001;
         `;
-        resultElement.textContent = `Player '${targetPlayer}' not found`;
+        resultElement.textContent = `Player ID '${targetId}' not found`;
         document.body.appendChild(resultElement);
         setTimeout(() => document.body.removeChild(resultElement), 3000);
         return;
     }
 
-    switch (command) {
+    switch(command) {
         case 'kill':
             socket.emit('admin_command', {
                 command: 'instant_kill',
-                target_id: targetId
+                target_id: targetId,
+                admin_id: gameState.userId
             });
             break;
         case 'god':
             socket.emit('admin_command', {
                 command: 'god_mode',
-                target_id: targetId
+                target_id: targetId,
+                admin_id: gameState.userId
             });
             break;
         case 'ban':
@@ -47,6 +40,7 @@ function executeAdminCommand(command, targetPlayer) {
                 socket.emit('admin_command', {
                     command: 'ban_player',
                     target_id: targetId,
+                    admin_id: gameState.userId,
                     reason: reason
                 });
             }
@@ -57,6 +51,7 @@ function executeAdminCommand(command, targetPlayer) {
                 socket.emit('admin_command', {
                     command: 'kick',
                     target_id: targetId,
+                    admin_id: gameState.userId,
                     reason: kickReason
                 });
             }
@@ -67,6 +62,7 @@ function executeAdminCommand(command, targetPlayer) {
                 socket.emit('admin_command', {
                     command: 'mute',
                     target_id: targetId,
+                    admin_id: gameState.userId,
                     duration: parseInt(duration)
                 });
             }
@@ -348,6 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // Modify gameState initialization
     let gameState = {
         players: {},
         bullets: [],
@@ -355,7 +352,9 @@ document.addEventListener('DOMContentLoaded', () => {
         scores: {},
         isAdmin: false,
         isModerator: false,
-        chatMessages: []
+        chatMessages: [],
+        userId: null,  // Store the current user's ID
+        adminIds: new Set()  // Store admin user IDs
     };
 
     // UI elements
@@ -755,23 +754,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('game_state', (state) => {
         console.log('Received game state:', state);
-        console.log('Admin status:', state.is_admin);
+        console.log('User ID:', state.user_id);
+        console.log('Admin IDs:', state.admin_ids);
 
         gameState.players = state.players;
         gameState.bullets = state.bullets;
         gameState.scores = state.scores;
+        gameState.userId = state.user_id;
 
-        if (!gameState.hasOwnProperty('isAdmin')) {
-            console.log('Setting initial admin status:', state.is_admin);
-            gameState.isAdmin = state.is_admin;
-            gameState.isModerator = state.is_moderator;
-
-            if (state.is_admin || state.is_moderator) {
-                console.log('User has admin/mod privileges, creating panel');
-                createAdminPanel();
-            }
+        // Update admin status based on user ID
+        if (state.admin_ids && Array.isArray(state.admin_ids)) {
+            gameState.adminIds = new Set(state.admin_ids);
+            gameState.isAdmin = gameState.adminIds.has(state.user_id);
         }
 
+        console.log('Current user admin status:', gameState.isAdmin);
+        if (gameState.isAdmin || gameState.isModerator) {
+            createAdminPanel();
+        }
         updateUI();
     });
 
@@ -933,17 +933,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cmd === 'help') {
             return `Available commands:
         /help - Show this help message
-        /kill <player> - Admin only: Kill specified player
-        /god <player> - Admin only: Toggle god mode for player
-        /kick <player> - Mod only: Kick player from game
-        /mute <player> <duration> - Mod only: Mute player
-        /ban <player> - Admin only: Ban player`;
+        /kill <player_id> - Admin only: Kill specified player
+        /god <player_id> - Admin only: Toggle god mode for player
+        /kick <player_id> - Mod only: Kick player from game
+        /mute <player_id> <duration> - Mod only: Mute player
+        /ban <player_id> - Admin only: Ban player`;
         }
 
         const [action, ...args] = cmd.split(' ');
-        const targetPlayer = args.join(' ');
+        const targetId = args[0];  // First argument is now the player ID
 
-        // First check permissions
+        // First check permissions using user ID
+        if (!gameState.userId) {
+            return 'Error: User ID not found';
+        }
+
+        // Check admin status using ID
         switch(action) {
             case 'kill':
             case 'god':
@@ -951,22 +956,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!gameState.isAdmin) {
                     return 'You do not have permission to use this command.';
                 }
-                if (!targetPlayer) {
-                    return 'Please specify a player name.';
+                if (!targetId) {
+                    return 'Please specify a player ID.';
                 }
-                executeAdminCommand(action, targetPlayer);
-                return `Executing ${action} command on player ${targetPlayer}...`;
+                executeAdminCommand(action, targetId);
+                return `Executing ${action} command on player ${targetId}...`;
 
             case 'kick':
             case 'mute':
                 if (!gameState.isAdmin && !gameState.isModerator) {
                     return 'You do not have permission to use this command.';
                 }
-                if (!targetPlayer) {
-                    return 'Please specify a player name.';
+                if (!targetId) {
+                    return 'Please specify a player ID.';
                 }
-                executeAdminCommand(action, targetPlayer);
-                return `Executing ${action} command on player ${targetPlayer}...`;
+                executeAdminCommand(action, targetId);
+                return `Executing ${action} command on player ${targetId}...`;
 
             default:
                 return 'Unknown command. Type /help for available commands.';
@@ -1074,17 +1079,22 @@ function processCommand(command) {
     if (cmd === 'help') {
         return `Available commands:
         /help - Show this help message
-        /kill <player> - Admin only: Kill specified player
-        /god <player> - Admin only: Toggle god mode for player
-        /kick <player> - Mod only: Kick player from game
-        /mute <player> <duration> - Mod only: Mute player
-        /ban <player> - Admin only: Ban player`;
+        /kill <player_id> - Admin only: Kill specified player
+        /god <player_id> - Admin only: Toggle god mode for player
+        /kick <player_id> - Mod only: Kick player from game
+        /mute <player_id> <duration> - Mod only: Mute player
+        /ban <player_id> - Admin only: Ban player`;
     }
 
     const [action, ...args] = cmd.split(' ');
-    const targetPlayer = args.join(' ');
+    const targetId = args[0];  // First argument is now the player ID
 
-    // First check permissions
+    // First check permissions using user ID
+    if (!gameState.userId) {
+        return 'Error: User ID not found';
+    }
+
+    // Check admin status using ID
     switch(action) {
         case 'kill':
         case 'god':
@@ -1092,22 +1102,22 @@ function processCommand(command) {
             if (!gameState.isAdmin) {
                 return 'You do not have permission to use this command.';
             }
-            if (!targetPlayer) {
-                return 'Please specify a player name.';
+            if (!targetId) {
+                return 'Please specify a player ID.';
             }
-            executeAdminCommand(action, targetPlayer);
-            return `Executing ${action} command on player ${targetPlayer}...`;
+            executeAdminCommand(action, targetId);
+            return `Executing ${action} command on player ${targetId}...`;
 
         case 'kick':
         case 'mute':
             if (!gameState.isAdmin && !gameState.isModerator) {
                 return 'You do not have permission to use this command.';
             }
-            if (!targetPlayer) {
-                return 'Please specify a player name.';
+            if (!targetId) {
+                return 'Please specify a player ID.';
             }
-            executeAdminCommand(action, targetPlayer);
-            return `Executing ${action} command on player ${targetPlayer}...`;
+            executeAdminCommand(action, targetId);
+            return `Executing ${action} command on player ${targetId}...`;
 
         default:
             return 'Unknown command. Type /help for available commands.';

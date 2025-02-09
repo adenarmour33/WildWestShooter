@@ -12,8 +12,7 @@ let gameState = {
     bullets: [],
     scores: {},
     isAdmin: false,
-    isModerator: false,
-    chatMessages: []
+    isModerator: false
 };
 
 // Camera setup
@@ -75,100 +74,68 @@ class Bullet {
     }
 }
 
-// Admin panel functionality
-function toggleAdminPanel() {
-    const adminPanel = document.querySelector('.admin-panel');
-    if (adminPanel) {
-        adminPanel.classList.toggle('active');
-    }
-}
+// Command system
+function handleCommand(command) {
+    const args = command.trim().split(' ');
+    const cmd = args[0].toLowerCase();
 
-function executeAdminCommand(command) {
-    const playerList = document.getElementById('playerList');
-    const selectedTarget = playerList ? playerList.value : null;
-
-    if (!selectedTarget) {
-        alert('Please select a player first');
+    if (cmd === '/help') {
+        alert(`Available Commands:
+/kill [player] - Instantly kill a player
+/god [player] - Toggle god mode for a player
+/kick [player] [reason] - Kick a player
+/ban [player] [reason] - Ban a player
+/mute [player] [duration] - Mute a player
+/mod [player] - Toggle moderator status
+/tp [player] - Teleport to player`);
         return;
     }
 
-    let data = {
-        command: command,
-        target_id: selectedTarget
-    };
-
-    if (command === 'ban' || command === 'kick') {
-        const reason = prompt('Enter reason:');
-        if (!reason) return;
-        data.reason = reason;
-    } else if (command === 'mute') {
-        const duration = prompt('Enter mute duration (minutes):', '5');
-        if (!duration) return;
-        data.duration = parseInt(duration);
+    // Command processing
+    switch(cmd) {
+        case '/kill':
+            if (!args[1]) return alert('Usage: /kill [player]');
+            socket.emit('admin_command', { command: 'kill', target: args[1] });
+            break;
+        case '/god':
+            if (!args[1]) return alert('Usage: /god [player]');
+            socket.emit('admin_command', { command: 'god', target: args[1] });
+            break;
+        case '/kick':
+            if (!args[1]) return alert('Usage: /kick [player] [reason]');
+            socket.emit('admin_command', {
+                command: 'kick',
+                target: args[1],
+                reason: args.slice(2).join(' ') || 'No reason provided'
+            });
+            break;
+        case '/ban':
+            if (!args[1]) return alert('Usage: /ban [player] [reason]');
+            socket.emit('admin_command', {
+                command: 'ban',
+                target: args[1],
+                reason: args.slice(2).join(' ') || 'No reason provided'
+            });
+            break;
+        case '/mute':
+            if (!args[1] || !args[2]) return alert('Usage: /mute [player] [duration]');
+            socket.emit('admin_command', {
+                command: 'mute',
+                target: args[1],
+                duration: parseInt(args[2])
+            });
+            break;
+        case '/mod':
+            if (!args[1]) return alert('Usage: /mod [player]');
+            socket.emit('admin_command', { command: 'mod', target: args[1] });
+            break;
+        case '/tp':
+            if (!args[1]) return alert('Usage: /tp [player]');
+            socket.emit('admin_command', { command: 'teleport', target: args[1] });
+            break;
+        default:
+            alert('Unknown command. Type /help for available commands.');
     }
-
-    socket.emit('admin_command', data);
-}
-
-function createAdminPanel() {
-    const adminPanel = document.querySelector('.admin-panel');
-    if (!adminPanel || (!gameState.isAdmin && !gameState.isModerator)) return;
-
-    setInterval(() => {
-        socket.emit('get_player_info');
-    }, 1000);
-
-    const playerList = document.createElement('select');
-    playerList.id = 'playerList';
-    playerList.className = 'form-select mb-2';
-
-    if (gameState.isAdmin) {
-        const adminButtons = [
-            { text: 'Instant Kill', class: 'btn-danger', command: 'kill' },
-            { text: 'Toggle God Mode', class: 'btn-warning', command: 'god' },
-            { text: 'Toggle Moderator', class: 'btn-info', command: 'mod' },
-            { text: 'Ban Player', class: 'btn-danger', command: 'ban' }
-        ];
-
-        adminButtons.forEach(btn => {
-            const button = document.createElement('button');
-            button.textContent = btn.text;
-            button.className = `btn ${btn.class} mb-2 w-100`;
-            button.onclick = () => executeAdminCommand(btn.command);
-            adminPanel.appendChild(button);
-        });
-    }
-
-    // Buttons for both admins and moderators
-    const moderatorButtons = [
-        { text: 'Kick Player', class: 'btn-warning', command: 'kick' },
-        { text: 'Mute Player', class: 'btn-secondary', command: 'mute' }
-    ];
-
-    moderatorButtons.forEach(btn => {
-        const button = document.createElement('button');
-        button.textContent = btn.text;
-        button.className = `btn ${btn.class} mb-2 w-100`;
-        button.onclick = () => executeAdminCommand(btn.command);
-        adminPanel.appendChild(button);
-    });
-
-    adminPanel.insertBefore(playerList, adminPanel.firstChild);
-
-    socket.on('player_info', (data) => {
-        const playerList = document.getElementById('playerList');
-        if (!playerList) return;
-
-        playerList.innerHTML = '<option value="">Select Player</option>';
-        data.players.forEach(player => {
-            if (player.id !== socket.id) { // Don't include self
-                const option = document.createElement('option');
-                option.value = player.id;
-                option.textContent = `${player.username} (HP: ${player.health})`;
-                playerList.appendChild(option);
-            }
-        });
-    });
 }
 
 // Initialize game after DOM is loaded
@@ -191,91 +158,29 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas();
 
-    // Socket event handlers
-    socket.on('moderator_status', (data) => {
-        gameState.isModerator = data.is_moderator;
-        if (data.is_moderator) {
-            createAdminPanel();
+    // Admin command input handler
+    document.addEventListener('keypress', (e) => {
+        if (e.key === "'" && (gameState.isAdmin || gameState.isModerator)) {
+            const command = prompt('Enter command (/help for commands):');
+            if (command) handleCommand(command);
         }
     });
 
-    socket.on('god_mode_update', (data) => {
-        alert(data.enabled ? 'God mode enabled' : 'God mode disabled');
-    });
-
+    // Socket event handlers
     socket.on('game_state', (state) => {
         gameState.players = state.players;
         gameState.scores = state.scores;
         gameState.isAdmin = state.is_admin;
         gameState.isModerator = state.is_moderator;
-
-        if ((state.is_admin || state.is_moderator) && !document.querySelector('.admin-panel.active')) {
-            createAdminPanel();
-        }
-        updateUI();
         gameState.bullets = state.bullets.map(b => new Bullet(
             b.x, b.y, b.angle, BULLET_SPEED, b.damage, b.weapon, b.shooter
         ));
+        updateUI();
     });
 
-    // Game loop
-    function gameLoop(timestamp) {
-        if (!lastUpdate) lastUpdate = timestamp;
-        const delta = timestamp - lastUpdate;
-
-        if (delta >= UPDATE_INTERVAL) {
-            lastUpdate = timestamp;
-        }
-
-        if (timestamp - lastNetworkUpdate >= NETWORK_UPDATE_INTERVAL) {
-            lastNetworkUpdate = timestamp;
-        }
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        requestAnimationFrame(gameLoop);
-    }
-
-    // Start game loop
-    requestAnimationFrame(gameLoop);
-
-    // Add chat UI
-    function createChatUI() {
-        const chatContainer = document.createElement('div');
-        chatContainer.className = 'chat-container';
-        chatContainer.innerHTML = `
-            <div class="chat-messages"></div>
-            <div class="chat-input-container">
-                <input type="text" class="chat-input" placeholder="Press Enter to chat...">
-            </div>
-        `;
-        document.body.appendChild(chatContainer);
-
-        const chatInput = chatContainer.querySelector('.chat-input');
-        const chatMessages = chatContainer.querySelector('.chat-messages');
-
-        chatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && chatInput.value.trim()) {
-                socket.emit('chat_message', { message: chatInput.value.trim() });
-                chatInput.value = '';
-            }
-        });
-
-        return { chatMessages };
-    }
-
-    const chatUI = createChatUI();
-
-    socket.on('chat_update', (data) => {
-        chatUI.chatMessages.innerHTML = data.messages.map(msg => `
-            <div class="chat-message">
-                <span class="chat-timestamp">[${msg.timestamp}]</span>
-                <span class="chat-username">${msg.username}:</span>
-                <span class="chat-text">${msg.message}</span>
-            </div>
-        `).join('');
-        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
+    socket.on('command_response', (data) => {
+        alert(data.message);
     });
-
 
     socket.on('banned', (data) => {
         alert(`You have been banned: ${data.reason}`);
@@ -312,8 +217,25 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('player_kill', (data) => {
         player.kills++;
         player.score += 100; // Award points for a kill
-        updateUI(); // Update UI to show new score
+        updateUI();
     });
+
+    // Game loop
+    function gameLoop(timestamp) {
+        if (!lastUpdate) lastUpdate = timestamp;
+        const delta = timestamp - lastUpdate;
+
+        if (delta >= UPDATE_INTERVAL) {
+            lastUpdate = timestamp;
+        }
+
+        if (timestamp - lastNetworkUpdate >= NETWORK_UPDATE_INTERVAL) {
+            lastNetworkUpdate = timestamp;
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        requestAnimationFrame(gameLoop);
+    }
 
     updateUI();
     requestAnimationFrame(gameLoop);

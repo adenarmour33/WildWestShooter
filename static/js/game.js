@@ -2,18 +2,29 @@ function executeAdminCommand(command, targetPlayer) {
     const playerList = document.getElementById('playerList');
     let targetId = null;
 
-    // Find the player ID from the select element
-    if (playerList) {
-        for (let option of playerList.options) {
-            if (option.text.toLowerCase().includes(targetPlayer.toLowerCase())) {
-                targetId = option.value;
-                break;
-            }
+    // Find the player ID from gameState.players
+    Object.entries(gameState.players).forEach(([id, player]) => {
+        if (player.username.toLowerCase().includes(targetPlayer.toLowerCase())) {
+            targetId = id;
         }
-    }
+    });
 
     if (!targetId) {
-        console.log('Player not found:', targetPlayer);
+        const resultElement = document.createElement('div');
+        resultElement.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 1001;
+        `;
+        resultElement.textContent = `Player '${targetPlayer}' not found`;
+        document.body.appendChild(resultElement);
+        setTimeout(() => document.body.removeChild(resultElement), 3000);
         return;
     }
 
@@ -191,6 +202,7 @@ function createAdminPanel() {
     document.body.appendChild(adminPanel);
     console.log('Admin panel added to document');
 }
+
 
 // Game setup
 let canvas, ctx, socket;
@@ -565,6 +577,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return bullet.active;
         });
     }
+
 
 
     function update(deltaTime) {
@@ -1016,6 +1029,28 @@ document.addEventListener('DOMContentLoaded', () => {
         chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
     });
 
+    // Update socket events for admin commands
+    socket.on('admin_command_result', (data) => {
+        const resultElement = document.createElement('div');
+        resultElement.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            z-index: 1001;
+        `;
+        resultElement.textContent = data.message;
+        document.body.appendChild(resultElement);
+
+        setTimeout(() => {
+            document.body.removeChild(resultElement);
+        }, 3000);
+    });
+
     // Other socket events remain unchanged
     updateUI();
     requestAnimationFrame(gameLoop);
@@ -1030,3 +1065,51 @@ let joystick = {
     deltaX: 0,
     deltaY: 0
 };
+
+// Update processCommand function
+function processCommand(command) {
+    // Remove the leading slash if present
+    const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
+
+    if (cmd === 'help') {
+        return `Available commands:
+        /help - Show this help message
+        /kill <player> - Admin only: Kill specified player
+        /god <player> - Admin only: Toggle god mode for player
+        /kick <player> - Mod only: Kick player from game
+        /mute <player> <duration> - Mod only: Mute player
+        /ban <player> - Admin only: Ban player`;
+    }
+
+    const [action, ...args] = cmd.split(' ');
+    const targetPlayer = args.join(' ');
+
+    // First check permissions
+    switch(action) {
+        case 'kill':
+        case 'god':
+        case 'ban':
+            if (!gameState.isAdmin) {
+                return 'You do not have permission to use this command.';
+            }
+            if (!targetPlayer) {
+                return 'Please specify a player name.';
+            }
+            executeAdminCommand(action, targetPlayer);
+            return `Executing ${action} command on player ${targetPlayer}...`;
+
+        case 'kick':
+        case 'mute':
+            if (!gameState.isAdmin && !gameState.isModerator) {
+                return 'You do not have permission to use this command.';
+            }
+            if (!targetPlayer) {
+                return 'Please specify a player name.';
+            }
+            executeAdminCommand(action, targetPlayer);
+            return `Executing ${action} command on player ${targetPlayer}...`;
+
+        default:
+            return 'Unknown command. Type /help for available commands.';
+    }
+}

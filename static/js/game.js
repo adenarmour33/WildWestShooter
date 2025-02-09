@@ -889,7 +889,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="command-prompt">/</span>
                 <input type="text" class="command-input" placeholder="Enter command...">
             </div>        `;
-        document.body.appendChild(cmdContainer);
+        document.body.appendChildcmdContainer);
 
         const cmdInput = cmdContainer.querySelector('.command-input');
 

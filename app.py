@@ -42,6 +42,12 @@ class GameRoom:
             {'x': 500, 'y': 200}, {'x': 800, 'y': 800}
         ]
         self.scores = {}  # Keep track of player scores
+        self.bot_names = [
+            "Desperado", "Gunslinger", "Ranger", "Sheriff", "Bounty Hunter",
+            "Marshal", "Outlaw", "Bandit", "Renegade", "Maverick"
+        ]
+        self.bot_update_interval = 0.5  # Bot AI update interval in seconds
+        self.last_bot_update = datetime.now()
 
     def get_random_spawn(self):
         return random.choice(self.spawn_points)
@@ -57,10 +63,34 @@ class GameRoom:
             'weapon': 'pistol',
             'score': 0,
             'kills': 0,
-            'deaths': 0
+            'deaths': 0,
+            'is_bot': False
         }
         self.scores[player_id] = 0
         return spawn
+
+    def add_bot(self):
+        bot_count = len([p for p in self.players.values() if p.get('is_bot', False)])
+        bot_id = f"bot_{bot_count}"
+        bot_name = self.bot_names[bot_count % len(self.bot_names)]
+        spawn = self.get_random_spawn()
+
+        self.players[bot_id] = {
+            'username': bot_name,
+            'x': spawn['x'],
+            'y': spawn['y'],
+            'rotation': 0,
+            'health': 100,
+            'weapon': 'pistol',
+            'score': 0,
+            'kills': 0,
+            'deaths': 0,
+            'is_bot': True,
+            'last_shot': 0,
+            'target': None
+        }
+        self.scores[bot_id] = 0
+        return bot_id
 
     def respawn_player(self, player_id):
         if player_id in self.players:
@@ -73,6 +103,55 @@ class GameRoom:
             })
             return spawn
         return None
+
+    def update_bots(self):
+        now = datetime.now()
+        if (now - self.last_bot_update).total_seconds() < self.bot_update_interval:
+            return
+
+        self.last_bot_update = now
+
+        # Update each bot's behavior
+        for bot_id, bot in self.players.items():
+            if not bot.get('is_bot', False) or bot['health'] <= 0:
+                continue
+
+            # Find nearest player as target
+            nearest_dist = float('inf')
+            nearest_player = None
+            for player_id, player in self.players.items():
+                if player_id != bot_id and not player.get('is_bot', False) and player['health'] > 0:
+                    dist = math.hypot(player['x'] - bot['x'], player['y'] - bot['y'])
+                    if dist < nearest_dist:
+                        nearest_dist = dist
+                        nearest_player = player_id
+
+            if nearest_player:
+                target = self.players[nearest_player]
+                # Calculate angle to target
+                dx = target['x'] - bot['x']
+                dy = target['y'] - bot['y']
+                bot['rotation'] = math.atan2(dy, dx)
+
+                # Move towards target
+                move_speed = 3
+                if nearest_dist > 200:  # Keep some distance
+                    bot['x'] += math.cos(bot['rotation']) * move_speed
+                    bot['y'] += math.sin(bot['rotation']) * move_speed
+
+                # Shoot at target
+                if nearest_dist < 400 and (now - datetime.fromtimestamp(bot.get('last_shot', 0))).total_seconds() > 1:
+                    # Add bullet
+                    bullet = {
+                        'x': bot['x'],
+                        'y': bot['y'],
+                        'angle': bot['rotation'],
+                        'damage': 15,  # Standard pistol damage
+                        'weapon': 'pistol',
+                        'shooter': bot_id
+                    }
+                    self.bullets.append(bullet)
+                    bot['last_shot'] = now.timestamp()
 
 game_rooms = {}
 player_states = {}
@@ -138,6 +217,9 @@ def handle_connect():
 
     if room not in game_rooms:
         game_rooms[room] = GameRoom()
+        # Add initial bots
+        for _ in range(5):  # Start with 5 bots
+            game_rooms[room].add_bot()
 
     # Add player to game room
     spawn = game_rooms[room].add_player(request.sid, session['username'])
@@ -177,6 +259,7 @@ def handle_player_update(data):
     if request.sid in player_states:
         room = player_states[request.sid]['room']
         if room in game_rooms:
+            # Update player state
             game_rooms[room].players[request.sid].update({
                 'x': data['x'],
                 'y': data['y'],
@@ -184,6 +267,11 @@ def handle_player_update(data):
                 'health': data['health'],
                 'weapon': data['weapon']
             })
+
+            # Update bots
+            game_rooms[room].update_bots()
+
+            # Send updated game state
             emit('game_state', {
                 'players': game_rooms[room].players,
                 'bullets': game_rooms[room].bullets,
@@ -226,6 +314,9 @@ def handle_player_hit(data):
                     game_rooms[room].players[shooter]['score'] += 10
                     game_rooms[room].players[shooter]['kills'] = game_rooms[room].players[shooter].get('kills', 0) + 1
                     game_rooms[room].scores[shooter] = game_rooms[room].players[shooter]['score']
+
+                    # Notify killer
+                    emit('player_kill', {}, room=shooter)
 
                 # Respawn player
                 spawn = game_rooms[room].respawn_player(request.sid)

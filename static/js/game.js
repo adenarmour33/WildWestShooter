@@ -290,6 +290,46 @@ document.addEventListener('DOMContentLoaded', () => {
         updateScoreboard();
     }
 
+    function checkBulletCollisions() {
+        const PLAYER_HITBOX = 16; // Half of player size for hitbox calculation
+
+        // Check each bullet for collision with players
+        gameState.bullets.forEach(bullet => {
+            // Skip bullets that have already hit something
+            if (!bullet.active) return;
+
+            // Check collision with current player
+            if (bullet.shooter !== socket.id) {  // Don't collide with own bullets
+                const dx = player.x + PLAYER_SIZE/2 - bullet.x;
+                const dy = player.y + PLAYER_SIZE/2 - bullet.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < PLAYER_HITBOX) {
+                    bullet.active = false;
+                    socket.emit('player_hit', {
+                        damage: bullet.damage,
+                        shooter: bullet.shooter
+                    });
+                    return;
+                }
+            }
+
+            // Check collision with other players
+            Object.entries(gameState.players).forEach(([id, otherPlayer]) => {
+                if (id === bullet.shooter || otherPlayer.health <= 0) return; // Skip shooter and dead players
+
+                const dx = otherPlayer.x + PLAYER_SIZE/2 - bullet.x;
+                const dy = otherPlayer.y + PLAYER_SIZE/2 - bullet.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < PLAYER_HITBOX) {
+                    bullet.active = false;
+                }
+            });
+        });
+    }
+
+
     function update(deltaTime) {
         if (player.health <= 0) return;
 
@@ -322,6 +362,9 @@ document.addEventListener('DOMContentLoaded', () => {
             bullet.update(deltaTime);
             return bullet.active;
         });
+
+        // Check bullet collisions
+        checkBulletCollisions();
 
         // Update camera with smooth following
         camera.followTarget(player, 0.1);

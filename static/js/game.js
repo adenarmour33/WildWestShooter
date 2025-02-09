@@ -622,6 +622,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedTarget = null;
 
     function createAdminPanel() {
+        // Don't create a new panel if one already exists
+        if (document.querySelector('.admin-panel')) {
+            return;
+        }
+
         const adminPanel = document.createElement('div');
         adminPanel.className = 'admin-panel';
 
@@ -645,63 +650,30 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-
         // Add buttons based on permissions
         if (gameState.isAdmin) {
             const killButton = document.createElement('button');
             killButton.textContent = 'Instant Kill';
             killButton.className = 'btn btn-danger mb-2';
-            killButton.onclick = () => {
-                if (selectedTarget) {
-                    socket.emit('admin_command', {
-                        command: 'instant_kill',
-                        target_id: selectedTarget
-                    });
-                }
-            };
+            killButton.onclick = () => executeAdminCommand('kill');
             adminPanel.appendChild(killButton);
 
             const godModeButton = document.createElement('button');
             godModeButton.textContent = 'Toggle God Mode';
             godModeButton.className = 'btn btn-warning mb-2';
-            godModeButton.onclick = () => {
-                if (selectedTarget) {
-                    socket.emit('admin_command', {
-                        command: 'god_mode',
-                        target_id: selectedTarget
-                    });
-                }
-            };
+            godModeButton.onclick = () => executeAdminCommand('god');
             adminPanel.appendChild(godModeButton);
 
             const modButton = document.createElement('button');
             modButton.textContent = 'Toggle Moderator';
             modButton.className = 'btn btn-info mb-2';
-            modButton.onclick = () => {
-                if (selectedTarget) {
-                    socket.emit('admin_command', {
-                        command: 'make_moderator',
-                        target_id: selectedTarget
-                    });
-                }
-            };
+            modButton.onclick = () => executeAdminCommand('mod');
             adminPanel.appendChild(modButton);
 
             const banButton = document.createElement('button');
             banButton.textContent = 'Ban Player';
             banButton.className = 'btn btn-danger mb-2';
-            banButton.onclick = () => {
-                if (selectedTarget) {
-                    const reason = prompt('Enter ban reason:');
-                    if (reason) {
-                        socket.emit('admin_command', {
-                            command: 'ban_player',
-                            target_id: selectedTarget,
-                            reason: reason
-                        });
-                    }
-                }
-            };
+            banButton.onclick = () => executeAdminCommand('ban');
             adminPanel.appendChild(banButton);
         }
 
@@ -709,44 +681,26 @@ document.addEventListener('DOMContentLoaded', () => {
         const kickButton = document.createElement('button');
         kickButton.textContent = 'Kick Player';
         kickButton.className = 'btn btn-warning mb-2';
-        kickButton.onclick = () => {
-            if (selectedTarget) {
-                const reason = prompt('Enter kick reason:');
-                if (reason) {
-                    socket.emit('admin_command', {
-                        command: 'kick',
-                        target_id: selectedTarget,
-                        reason: reason
-                    });
-                }
-            }
-        };
+        kickButton.onclick = () => executeAdminCommand('kick');
         adminPanel.appendChild(kickButton);
 
         const muteButton = document.createElement('button');
         muteButton.textContent = 'Mute Player';
         muteButton.className = 'btn btn-secondary mb-2';
-        muteButton.onclick = () => {
-            if (selectedTarget) {
-                const duration = prompt('Enter mute duration (minutes):', '5');
-                if (duration) {
-                    socket.emit('admin_command', {
-                        command: 'mute',
-                        target_id: selectedTarget,
-                        duration: duration
-                    });
-                }
-            }
-        };
+        muteButton.onclick = () => executeAdminCommand('mute');
         adminPanel.appendChild(muteButton);
 
         const playerList = document.createElement('select');
         playerList.id = 'playerList';
-        playerList.style.marginBottom = '10px';
-        playerList.addEventListener('change', (e) => {
-            selectedTarget = e.target.value;
-        });
+        playerList.className = 'form-select mb-2';
+        playerList.innerHTML = '<option value="">Select Player</option>';
         adminPanel.appendChild(playerList);
+
+        const adminToggle = document.createElement('button');
+        adminToggle.className = 'admin-toggle';
+        adminToggle.onclick = () => toggleAdminPanel();
+        adminToggle.innerHTML = '<span class="action-icon">⚙️</span>';
+        adminPanel.appendChild(adminToggle);
 
         document.body.appendChild(adminPanel);
     }
@@ -819,15 +773,19 @@ document.addEventListener('DOMContentLoaded', () => {
             b.x, b.y, b.angle, BULLET_SPEED, b.damage, b.weapon, b.shooter
         ));
         gameState.scores = state.scores;
-        gameState.isAdmin = state.is_admin;
-        gameState.isModerator = state.is_moderator;
 
-        // Only create admin panel if user is an admin and panel doesn't exist
-        const existingPanel = document.querySelector('.admin-panel');
-        if (state.is_admin && !existingPanel) {
-            createAdminPanel();
-        } else if (!state.is_admin && existingPanel) {
-            existingPanel.remove();
+        // Only update admin status if it changed
+        if (gameState.isAdmin !== state.is_admin) {
+            gameState.isAdmin = state.is_admin;
+            gameState.isModerator = state.is_moderator;
+
+            // Handle admin panel visibility
+            const existingPanel = document.querySelector('.admin-panel');
+            if (state.is_admin && !existingPanel) {
+                createAdminPanel();
+            } else if (!state.is_admin && existingPanel) {
+                existingPanel.remove();
+            }
         }
 
         updateUI();

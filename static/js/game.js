@@ -750,6 +750,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // Socket events
     socket.on('connect', () => {
         console.log('Connected to server');
+
+        // Request authentication status immediately after connection
+        socket.emit('authenticate');
+    });
+
+    socket.on('authentication_response', (data) => {
+        console.log('Authentication response:', data);
+        if (data.user_id) {
+            gameState.userId = data.user_id;
+            gameState.isAdmin = data.is_admin || false;
+            console.log('User authenticated:', {
+                userId: gameState.userId,
+                isAdmin: gameState.isAdmin
+            });
+
+            if (gameState.isAdmin) {
+                createAdminPanel();
+            }
+        }
     });
 
     socket.on('game_state', (state) => {
@@ -759,50 +778,31 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState.players = state.players || {};
         gameState.bullets = state.bullets || [];
         gameState.scores = state.scores || {};
+        gameState.chatMessages = state.chat_messages || [];
 
-        // Important: Set user ID and admin status
-        if (state.user_id) {
-            console.log('Setting user ID:', state.user_id);
-            gameState.userId = state.user_id;
-
-            // Update admin status based on admin_ids array
-            if (state.admin_ids && Array.isArray(state.admin_ids)) {
-                gameState.adminIds = new Set(state.admin_ids);
-                gameState.isAdmin = gameState.adminIds.has(state.user_id);
-                console.log('Admin status updated:', gameState.isAdmin);
-                console.log('Admin IDs:', [...gameState.adminIds]);
-            }
-        } else {
-            console.warn('No user_id received in game state');
-        }
-
-        // Create admin panel if user is admin
-        if (gameState.isAdmin) {
-            console.log('User is admin, creating admin panel');
-            createAdminPanel();
+        // Update player list if admin panel exists
+        const playerList = document.getElementById('playerList');
+        if (playerList && Object.keys(gameState.players).length > 0) {
+            updatePlayerList();
         }
 
         updateUI();
     });
 
-    socket.on('player_info', (data) => {
+    function updatePlayerList() {
         const playerList = document.getElementById('playerList');
-        if (!playerList) {
-            console.log('Player list element not found');
-            return;
-        }
+        if (!playerList) return;
 
         playerList.innerHTML = '<option value="">Select Player</option>';
-        data.players.forEach(player => {
-            if (player.id !== gameState.userId) {  // Don't include self
+        Object.entries(gameState.players).forEach(([id, player]) => {
+            if (id !== gameState.userId) {  // Don't include self
                 const option = document.createElement('option');
-                option.value = player.id;
-                option.textContent = `${player.username} (ID: ${player.id})`;
+                option.value = id;
+                option.textContent = `${player.username} (ID: ${id})`;
                 playerList.appendChild(option);
             }
         });
-    });
-
+    }
 
     // Add chat UI
     function createChatUI() {
@@ -888,8 +888,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="command-input-container">
                 <span class="command-prompt">/</span>
                 <input type="text" class="command-input" placeholder="Enter command...">
-            </div>
-        `;
+            </div>        `;
         document.body.appendChild(cmdContainer);
 
         const cmdInput = cmdContainer.querySelector('.command-input');

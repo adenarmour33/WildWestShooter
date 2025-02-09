@@ -1,3 +1,35 @@
+// Game setup
+let canvas, ctx, socket;
+let tileSize = 32;
+let lastUpdate = 0;
+const UPDATE_INTERVAL = 1000 / 60; // 60fps target
+const NETWORK_UPDATE_INTERVAL = 50; // Send updates every 50ms
+let lastNetworkUpdate = 0;
+let assets = {
+    tiles: {
+        grass: new Image(),
+        sand: new Image(),
+        tree: new Image()
+    },
+    player: new Image(),
+    weapons: {
+        pistol: new Image(),
+        shotgun: new Image(),
+        smg: new Image(),
+        knife: new Image()
+    }
+};
+
+// Load assets with SVG paths
+assets.tiles.grass.src = '/static/assets/tiles/grass.svg';
+assets.tiles.sand.src = '/static/assets/tiles/sand.svg';
+assets.tiles.tree.src = '/static/assets/tiles/tree.svg';
+assets.player.src = '/static/assets/player.svg';
+assets.weapons.pistol.src = '/static/assets/weapons/pistol.svg';
+assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.svg';
+assets.weapons.smg.src = '/static/assets/weapons/smg.svg';
+assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
+
 function executeAdminCommand(command, targetId) {
     // Check if target exists in players
     if (!gameState.players[targetId]) {
@@ -199,41 +231,12 @@ function createAdminPanel() {
     console.log('Admin panel added to document');
 }
 
-// Game setup
-let canvas, ctx, socket;
-let tileSize = 32;
-let lastUpdate = 0;
-const UPDATE_INTERVAL = 1000 / 60; // 60fps target
-const NETWORK_UPDATE_INTERVAL = 50; // Send updates every 50ms
-let lastNetworkUpdate = 0;
-let assets = {
-    tiles: {
-        grass: new Image(),
-        sand: new Image(),
-        tree: new Image()
-    },
-    player: new Image(),
-    weapons: {
-        pistol: new Image(),
-        shotgun: new Image(),
-        smg: new Image(),
-        knife: new Image()
-    }
-};
-
-// Load assets with SVG paths
-assets.tiles.grass.src = '/static/assets/tiles/grass.svg';
-assets.tiles.sand.src = '/static/assets/tiles/sand.svg';
-assets.tiles.tree.src = '/static/assets/tiles/tree.svg';
-assets.player.src = '/static/assets/player.svg';
-assets.weapons.pistol.src = '/static/assets/weapons/pistol.svg';
-assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.svg';
-assets.weapons.smg.src = '/static/assets/weapons/smg.svg';
-assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
-
 // Initialize game after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM Content Loaded');
+
+    // Initialize socket first
+    socket = io();
 
     // Initialize gameState at the start
     let gameState = {
@@ -247,6 +250,81 @@ document.addEventListener('DOMContentLoaded', () => {
         userId: null,  // Store the current user's ID
         adminIds: new Set()  // Store admin user IDs
     };
+
+    // Create chat UI function
+    function createChatUI() {
+        const chatContainer = document.createElement('div');
+        chatContainer.className = 'chat-container';
+        chatContainer.innerHTML = `
+            <div class="chat-messages"></div>
+            <div class="chat-input-container">
+                <input type="text" class="chat-input" placeholder="Press Enter to chat...">
+            </div>
+        `;
+        document.body.appendChild(chatContainer);
+
+        const chatInput = chatContainer.querySelector('.chat-input');
+        const chatMessages = chatContainer.querySelector('.chat-messages');
+
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && chatInput.value.trim()) {
+                socket.emit('chat_message', { message: chatInput.value.trim() });
+                chatInput.value = '';
+            }
+        });
+
+        // Add chat styles
+        const style = document.createElement('style');
+        style.textContent = `
+            .chat-container {
+                position: fixed;
+                left: 20px;
+                bottom: 20px;
+                width: 300px;
+                height: 200px;
+                background: rgba(0, 0, 0, 0.8);
+                border-radius: 5px;
+                display: flex;
+                flex-direction: column;
+                z-index: 1000;
+            }
+            .chat-messages {
+                flex: 1;
+                overflow-y: auto;
+                padding: 10px;
+                color: white;
+            }
+            .chat-input-container {
+                padding: 10px;
+                border-top: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            .chat-input {
+                width: 100%;
+                background: rgba(255, 255, 255, 0.1);
+                border: none;
+                padding: 5px 10px;
+                color: white;
+                border-radius: 3px;
+            }
+            .chat-message {
+                margin-bottom: 5px;
+            }
+            .chat-timestamp {
+                color: #666;
+                margin-right: 5px;
+            }
+            .chat-username {
+                color: #4a9eff;
+                margin-right: 5px;
+            }
+            .chat-text {
+                color: #fff;
+            }
+        `;
+        document.head.appendChild(style);
+
+        return { chatMessages, chatInput };
+    }
 
     // Create command line interface
     function createCommandLine() {
@@ -397,30 +475,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Initialize command line interface
-    const { cmdContainer, cmdInput } = createCommandLine();
-
-    // Create chat UI
+    // Initialize interfaces
     const chatUI = createChatUI();
-
-    // Add chat message handler
-    socket.on('chat_message', (data) => {
-        if (!chatUI.chatMessages) return;
-
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'chat-message';
-
-        const timestamp = new Date().toLocaleTimeString();
-        messageDiv.innerHTML = `
-            <span class="chat-timestamp">[${timestamp}]</span>
-            <span class="chat-username">${data.username}:</span>
-            <span class="chat-text">${data.message}</span>
-        `;
-
-        chatUI.chatMessages.appendChild(messageDiv);
-        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
-    });
-
+    const { cmdContainer, cmdInput } = createCommandLine();
 
     // Socket event handlers
     socket.on('connect', () => {
@@ -446,13 +503,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    socket.on('chat_message', (data) => {
+        if (!chatUI.chatMessages) return;
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'chat-message';
+
+        const timestamp = new Date().toLocaleTimeString();
+        messageDiv.innerHTML = `
+            <span class="chat-timestamp">[${timestamp}]</span>
+            <span class="chat-username">${data.username}:</span>
+            <span class="chat-text">${data.message}</span>
+        `;
+
+        chatUI.chatMessages.appendChild(messageDiv);
+        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
+    });
+
+
     canvas = document.getElementById('gameCanvas');
     if (!canvas) {
         console.error('Canvas element not found');
         return;
     }
     ctx = canvas.getContext('2d');
-    socket = io();
+    //socket = io(); // Socket initialization moved to the top
 
     // Game constants
     const PLAYER_SIZE = 32;
@@ -847,7 +922,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, 0, canvas.width, canvas.height);
 
         // Draw map tiles
         const startCol = Math.floor(camera.x / tileSize);
@@ -889,8 +964,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Draw player name and health
             ctx.fillStyle = '#ffffff';
             ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(p.username, screenX + PLAYER_SIZE/2, screenY - 20);
+            ctx.textAlign = 'center';            ctx.fillText(p.username, screenX + PLAYER_SIZE/2, screenY - 20);
 
             // Health bar
             const healthBarWidth = 32;
@@ -1126,7 +1200,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         document.head.appendChild(style);
 
-        return { chatMessages };
+        return { chatMessages, chatInput };
     }
 
     // Add command line toggle with ' key

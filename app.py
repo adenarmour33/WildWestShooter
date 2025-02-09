@@ -156,6 +156,31 @@ class GameRoom:
         if len(self.chat_messages) > 50:
             self.chat_messages.pop(0)
 
+    def add_help_message(self, player_id):
+        """Add help message showing available commands"""
+        if player_id in player_states:
+            user_id = player_states[player_id]['user_id']
+            if not isinstance(user_id, str) or not user_id.startswith('guest_'):
+                user = User.query.get(user_id)
+                if user:
+                    commands = []
+                    if user.is_admin:
+                        commands.extend([
+                            "/god [username] - Toggle god mode",
+                            "/kill [username] - Instant kill player",
+                            "/mod [username] - Make player a moderator"
+                        ])
+                    if user.is_admin or user.is_moderator:
+                        commands.extend([
+                            "/kick [username] [reason] - Kick player",
+                            "/mute [username] [duration] - Mute player for duration (minutes)"
+                        ])
+
+                    if commands:
+                        self.add_chat_message("SYSTEM", "Available commands:", is_admin=True)
+                        for cmd in commands:
+                            self.add_chat_message("SYSTEM", cmd, is_admin=True)
+
 
 game_rooms = {}
 player_states = {}
@@ -264,6 +289,10 @@ def handle_connect():
         'is_admin': session.get('is_admin', False)
     }
 
+    # Show help message with available commands
+    if room in game_rooms:
+        game_rooms[room].add_help_message(request.sid)
+
     emit('game_state', {
         'players': game_rooms[room].players,
         'bullets': game_rooms[room].bullets,
@@ -332,20 +361,87 @@ def handle_player_shoot(data):
                 'chat_messages': game_rooms[room].chat_messages
             }, room=room)
 
+def find_player_by_username(room, username):
+    """Helper function to find a player by username in a room"""
+    for player_id, player in game_rooms[room].players.items():
+        if player['username'].lower() == username.lower():
+            return player_id, player
+    return None, None
+
 @socketio.on('chat_message')
 def handle_chat_message(data):
     if request.sid in player_states:
         room = player_states[request.sid]['room']
         if room in game_rooms:
-            user_id = str(player_states[request.sid]['user_id'])  # Convert to string
-            if not isinstance(user_id, str) or not user_id.startswith('guest_'):
+            user_id = str(player_states[request.sid]['user_id'])
+            message = data['message'].strip()
+
+            # Check if this is a command
+            if message.startswith('/') and (not isinstance(user_id, str) or not user_id.startswith('guest_')):
+                user = User.query.get(player_states[request.sid]['user_id'])
+                if user and (user.is_admin or user.is_moderator):
+                    parts = message[1:].split()
+                    if not parts:
+                        return
+
+                    command = parts[0].lower()
+                    # Commands that require a target username
+                    if len(parts) >= 2:
+                        target_username = parts[1]
+                        target_id, target_player = find_player_by_username(room, target_username)
+
+                        if target_id:
+                            # Admin-only commands
+                            if user.is_admin:
+                                if command == 'god':
+                                    socketio.emit('admin_command', {
+                                        'command': 'god_mode',
+                                        'target_id': target_id
+                                    })
+                                    return
+                                elif command == 'kill':
+                                    socketio.emit('admin_command', {
+                                        'command': 'instant_kill',
+                                        'target_id': target_id
+                                    })
+                                    return
+                                elif command == 'mod':
+                                    socketio.emit('admin_command', {
+                                        'command': 'make_moderator',
+                                        'target_id': target_id
+                                    })
+                                    return
+
+                            # Moderator commands (available to both moderators and admins)
+                            if command == 'kick' and len(parts) >= 3:
+                                reason = ' '.join(parts[2:])
+                                socketio.emit('admin_command', {
+                                    'command': 'kick',
+                                    'target_id': target_id,
+                                    'reason': reason
+                                })
+                                return
+                            elif command == 'mute' and len(parts) >= 3:
+                                try:
+                                    duration = int(parts[2])
+                                    socketio.emit('admin_command', {
+                                        'command': 'mute',
+                                        'target_id': target_id,
+                                        'duration': duration
+                                    })
+                                    return
+                                except ValueError:
+                                    pass
+
+            # If not a command or command failed, process as regular chat message
+            if (not isinstance(user_id, str) or not user_id.startswith('guest_')):
                 user = User.query.get(player_states[request.sid]['user_id'])
                 if user and not user.is_muted:
                     is_admin = session.get('is_admin', False)
                     is_moderator = getattr(user, 'is_moderator', False)
                     game_rooms[room].add_chat_message(
                         session['username'],
-                        data['message'],
+                        message,
                         is_admin=is_admin,
                         is_moderator=is_moderator
                     )

@@ -214,6 +214,9 @@ def login():
             session['is_admin'] = user.is_admin
             session['email'] = email  # Store email in session
 
+            if user.is_admin:
+                flash('Welcome Administrator! You have full access to all game controls.')
+
             return redirect(url_for('index'))
         flash('Invalid username or password')
     return render_template('login.html')

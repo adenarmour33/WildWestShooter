@@ -1,0 +1,83 @@
+’m looking for a developer to create a 2D pixel art multiplayer Wild West shooter game with:
+
+✔️ Online multiplayer support (play with friends & others)
+✔️ A boss battle mode
+✔️ Weapon & melee system (including a knife for close combat)
+✔️ Friends list & game lobbies
+✔️ In-game chat (T to open chat, UI in the bottom-left corner)
+✔️ Smooth movement mechanics (WASD, sprint, jump, double jump, etc.)
+✔️ Login/Signup system for player accounts
+✔️ Main menu with Play, Settings, and Friends List
+✔️ Custom pixel art for characters, weapons, and the environment
+✔️ In-game leaderboard showing top players per match
+✔️ Customizable skins for players
+
+Core Features:
+
+🏆 Multiplayer System
+• Online matchmaking – Players can join public or private lobbies.
+• Friends system – Add players to a friends list & invite them to join your game.
+• Game lobbies – Players can create & join rooms before matches start.
+
+🔫 Player vs. Boss Mode
+• Player HP: 100
+• Boss HP: 500
+• The boss should have different attack patterns (gunfire, melee, special moves).
+
+🔥 Weapon & Melee System
+• Four weapons:
+1️⃣ Pistol – Medium fire rate, balanced damage.
+2️⃣ Shotgun – High spread, high close-range damage.
+3️⃣ SMG – Fast fire rate, lower damage per shot.
+4️⃣ Knife (Melee Weapon) – High damage, close-range attack.
+• Weapon switching:
+• Keyboard (1, 2, 3, 4)
+• Mouse click on UI item bar
+
+🎮 Controls & Movement System
+• WASD – Movement.
+• Space – Jump.
+• Double Space (Fast Clicks) – Double Jump.
+• Shift – Sprint.
+• Ctrl (or C) – Crouch.
+• 1, 2, 3, 4 – Switch weapons (4 = melee knife).
+• T – Open in-game chat.
+• Left Click – Shoot (or melee attack if holding knife).
+• Right Click – Aim (except for melee weapon).
+
+🎨 Customizable Player Skins
+• Players can choose from different skins to customize their character.
+• Skins should be pixel-art based and fit the Wild West theme (cowboys, outlaws, sheriffs, etc.).
+• Option to unlock skins through achievements or leaderboard rankings.
+
+📊 In-Game Leaderboard
+• A live leaderboard inside every game that ranks players by:
+• Kills
+• Damage dealt
+• Survival time
+• Updates dynamically as the match progresses.
+
+🎤 In-Game Chat (Bottom-Left UI)
+• Press “T” to open chat.
+• Chatbox positioned in bottom-left corner.
+• Typing bar with “Press T to chat” placeholder.
+• Messages are visible to players in the lobby/match.
+
+🎨 2D Pixel Art Graphics & Wild West Theme
+• Custom pixel art for characters, weapons, backgrounds, and skins.
+• A Western battlefield with buildings, cover, and interactive objects.
+
+⚙️ Main Menu & UI
+• Login/Signup system – Players can create accounts and log in.
+• Main Menu – Buttons for Play, Settings, Friends List, and Skins Selection.
+• Settings Menu – Adjustable controls, audio, and graphics.
+
+Bonus Features (Optional, but Preferred):
+• Multiplayer Co-op or PvP Mode.
+• Persistent Global Leaderboard (showing best players across all matches).
+• Additional unlockable skins via achievements or in-game currency.
+• AI Minions to Support the Boss.
+Deliverables:
+• Fully playable multiplayer 2D pixel art game with hosting setup (Replit, Vercel, or another service).
+• Custom pixel art assets (characters, weapons, skins, environment).
+• Clean and well-documented code for future updates.

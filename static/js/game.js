@@ -61,16 +61,19 @@ document.addEventListener('DOMContentLoaded', () => {
             this.damage = damage;
             this.weapon = weapon;
             this.shooter = shooter;
-            this.lifetime = 2000;
+            this.lifetime = 2000; // 2 seconds lifetime
             this.spawnTime = Date.now();
             this.active = true;
         }
 
         update(deltaTime) {
             if (!this.active) return;
+
             const movement = this.speed * (deltaTime / 16.67); // Normalize for 60fps
             this.x += Math.cos(this.angle) * movement;
             this.y += Math.sin(this.angle) * movement;
+
+            // Deactivate bullet after lifetime expires
             if (Date.now() - this.spawnTime > this.lifetime) {
                 this.active = false;
             }
@@ -293,9 +296,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkBulletCollisions() {
         const PLAYER_HITBOX = 16; // Half of player size for hitbox calculation
 
-        // Check each bullet for collision with players
-        gameState.bullets.forEach(bullet => {
-            if (!bullet.active) return;
+        gameState.bullets = gameState.bullets.filter(bullet => {
+            const lifetime = 2000; // Match server-side lifetime
+            if (Date.now() - bullet.spawnTime > lifetime) {
+                return false;
+            }
 
             // Check collision with current player
             if (bullet.shooter !== socket.id && player.health > 0) {
@@ -304,31 +309,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
                 if (distance < PLAYER_HITBOX) {
-                    bullet.active = false;
                     socket.emit('player_hit', {
                         damage: bullet.damage,
                         shooter: bullet.shooter
                     });
-                    return;
+                    return false;
                 }
             }
 
             // Check collision with other players
-            Object.entries(gameState.players).forEach(([id, otherPlayer]) => {
-                if (id === bullet.shooter || otherPlayer.health <= 0 || id === socket.id) return;
+            for (const [id, otherPlayer] of Object.entries(gameState.players)) {
+                if (id === bullet.shooter || otherPlayer.health <= 0 || id === socket.id) continue;
 
                 const dx = otherPlayer.x + PLAYER_SIZE/2 - bullet.x;
                 const dy = otherPlayer.y + PLAYER_SIZE/2 - bullet.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
                 if (distance < PLAYER_HITBOX) {
-                    bullet.active = false;
+                    return false;
                 }
-            });
+            }
+
+            return true;
         });
 
         // Update local bullets
-        gameState.localBullets = gameState.localBullets.filter(bullet => bullet.active);
+        gameState.localBullets = gameState.localBullets.filter(bullet => {
+            bullet.update(16.67); // Assume 60fps for local bullets
+            return bullet.active;
+        });
     }
 
 

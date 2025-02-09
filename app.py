@@ -46,7 +46,7 @@ class GameRoom:
             "Desperado", "Gunslinger", "Ranger", "Sheriff", "Bounty Hunter",
             "Marshal", "Outlaw", "Bandit", "Renegade", "Maverick"
         ]
-        self.bot_update_interval = 0.5  # Bot AI update interval in seconds
+        self.bot_update_interval = 0.1  # Faster bot updates
         self.last_bot_update = datetime.now()
 
     def get_random_spawn(self):
@@ -79,15 +79,15 @@ class GameRoom:
             'username': bot_name,
             'x': spawn['x'],
             'y': spawn['y'],
-            'rotation': 0,
+            'rotation': random.random() * 2 * math.pi,  # Random initial direction
             'health': 100,
             'weapon': 'pistol',
             'score': 0,
             'kills': 0,
             'deaths': 0,
             'is_bot': True,
-            'last_shot': 0,
-            'target': None
+            'move_timer': 0,
+            'move_direction': random.random() * 2 * math.pi  # Random movement direction
         }
         self.scores[bot_id] = 0
         return bot_id
@@ -116,61 +116,24 @@ class GameRoom:
             if not bot.get('is_bot', False):
                 continue
 
-            # Reset dead bots
-            if bot['health'] <= 0:
-                spawn = self.get_random_spawn()
-                bot.update({
-                    'x': spawn['x'],
-                    'y': spawn['y'],
-                    'health': 100,
-                    'deaths': bot.get('deaths', 0) + 1
-                })
-                continue
+            # Change direction randomly
+            bot['move_timer'] = bot.get('move_timer', 0) + self.bot_update_interval
+            if bot['move_timer'] >= 3:  # Change direction every 3 seconds
+                bot['move_direction'] = random.random() * 2 * math.pi
+                bot['move_timer'] = 0
 
-            # Find nearest player as target
-            nearest_dist = float('inf')
-            nearest_player = None
-            for player_id, player in self.players.items():
-                if player_id != bot_id and not player.get('is_bot', False) and player['health'] > 0:
-                    dist = math.hypot(player['x'] - bot['x'], player['y'] - bot['y'])
-                    if dist < nearest_dist:
-                        nearest_dist = dist
-                        nearest_player = player_id
+            # Move bot
+            speed = 3
+            bot['x'] += math.cos(bot['move_direction']) * speed
+            bot['y'] += math.sin(bot['move_direction']) * speed
 
-            if nearest_player:
-                target = self.players[nearest_player]
-                # Calculate angle to target
-                dx = target['x'] - bot['x']
-                dy = target['y'] - bot['y']
-                bot['rotation'] = math.atan2(dy, dx)
+            # Keep bots within map bounds (assuming 1000x1000 map)
+            bot['x'] = max(0, min(bot['x'], 1000))
+            bot['y'] = max(0, min(bot['y'], 1000))
+            bot['rotation'] = bot['move_direction']
 
-                # Move towards target with improved pathfinding
-                move_speed = 3
-                if nearest_dist > 200:  # Keep some distance
-                    # Add slight randomization to movement
-                    angle_offset = (random.random() - 0.5) * 0.5  # Small random angle adjustment
-                    move_angle = bot['rotation'] + angle_offset
-                    bot['x'] += math.cos(move_angle) * move_speed
-                    bot['y'] += math.sin(move_angle) * move_speed
-
-                    # Ensure bots stay within bounds
-                    bot['x'] = max(0, min(bot['x'], 1000))
-                    bot['y'] = max(0, min(bot['y'], 1000))
-
-                # Shoot at target
-                if nearest_dist < 400:
-                    current_time = now.timestamp()
-                    if current_time - bot.get('last_shot', 0) > 1:
-                        bullet = {
-                            'x': bot['x'],
-                            'y': bot['y'],
-                            'angle': bot['rotation'],
-                            'damage': 15,
-                            'weapon': 'pistol',
-                            'shooter': bot_id
-                        }
-                        self.bullets.append(bullet)
-                        bot['last_shot'] = current_time
+        # Clean up old bullets
+        self.bullets = [b for b in self.bullets if (now - datetime.fromtimestamp(b.get('created_at', now.timestamp()))).total_seconds() < 2]
 
 game_rooms = {}
 player_states = {}
@@ -308,7 +271,8 @@ def handle_player_shoot(data):
                 'angle': data['angle'],
                 'damage': data['damage'],
                 'weapon': data['weapon'],
-                'shooter': request.sid
+                'shooter': request.sid,
+                'created_at': datetime.now().timestamp()  # Add creation timestamp
             }
             game_rooms[room].bullets.append(bullet)
             emit('game_state', {

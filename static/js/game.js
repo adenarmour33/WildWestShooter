@@ -1,3 +1,10 @@
+function toggleAdminPanel() {
+    const adminPanel = document.querySelector('.admin-panel');
+    if (adminPanel) {
+        adminPanel.classList.toggle('active');
+    }
+}
+
 // Game setup
 let canvas, ctx, socket;
 let tileSize = 32;
@@ -5,7 +12,6 @@ let lastUpdate = 0;
 const UPDATE_INTERVAL = 1000 / 60; // 60fps target
 const NETWORK_UPDATE_INTERVAL = 50; // Send updates every 50ms
 let lastNetworkUpdate = 0;
-
 let assets = {
     tiles: {
         grass: new Image(),
@@ -679,13 +685,6 @@ document.addEventListener('DOMContentLoaded', () => {
         adminPanel.appendChild(playerList);
 
         document.body.appendChild(adminPanel);
-    }
-
-    function toggleAdminPanel() {
-        const adminPanel = document.querySelector('.admin-panel');
-        if (adminPanel) {
-            adminPanel.classList.toggle('active');
-        }
     }
 
     // Add chat UI

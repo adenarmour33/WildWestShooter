@@ -1,9 +1,9 @@
-const style = document.createElement('style');
-style.textContent = `
+const adminStyles = document.createElement('style');
+adminStyles.textContent = `
     .admin-panel {
         position: fixed;
         top: 20px;
-        right: -200px; /* Start hidden */
+        right: -200px;
         width: 200px;
         background: rgba(0, 0, 0, 0.8);
         padding: 15px;
@@ -32,7 +32,7 @@ style.textContent = `
         justify-content: center;
     }
 `;
-document.head.appendChild(style);
+document.head.appendChild(adminStyles);
 
 function executeAdminCommand(command) {
     const playerList = document.getElementById('playerList');
@@ -92,17 +92,79 @@ function executeAdminCommand(command) {
                 });
             }
             break;
-        default:
-            console.error('Unknown admin command:', command);
     }
 }
 
 function toggleAdminPanel() {
-    const adminPanel = document.querySelector('.admin-panel');
-    if (adminPanel) {
-        adminPanel.classList.toggle('active');
+    const panel = document.querySelector('.admin-panel');
+    if (panel) {
+        panel.classList.toggle('active');
     }
 }
+
+function createAdminPanel() {
+    // Only create if it doesn't exist
+    if (document.querySelector('.admin-panel')) {
+        return;
+    }
+
+    const adminPanel = document.createElement('div');
+    adminPanel.className = 'admin-panel';
+
+    // Create player list dropdown first
+    const playerList = document.createElement('select');
+    playerList.id = 'playerList';
+    playerList.className = 'form-select mb-2';
+    playerList.innerHTML = '<option value="">Select Player</option>';
+    adminPanel.appendChild(playerList);
+
+    // Admin-only buttons
+    if (gameState.isAdmin) {
+        const buttons = [
+            { text: 'Instant Kill', command: 'kill', class: 'btn-danger' },
+            { text: 'Toggle God Mode', command: 'god', class: 'btn-warning' },
+            { text: 'Toggle Moderator', command: 'mod', class: 'btn-info' },
+            { text: 'Ban Player', command: 'ban', class: 'btn-danger' }
+        ];
+
+        buttons.forEach(btn => {
+            const button = document.createElement('button');
+            button.textContent = btn.text;
+            button.className = `btn ${btn.class} mb-2 w-100`;
+            button.onclick = () => executeAdminCommand(btn.command);
+            adminPanel.appendChild(button);
+        });
+    }
+
+    // Moderator buttons (available to both admins and moderators)
+    const modButtons = [
+        { text: 'Kick Player', command: 'kick', class: 'btn-warning' },
+        { text: 'Mute Player', command: 'mute', class: 'btn-secondary' }
+    ];
+
+    modButtons.forEach(btn => {
+        const button = document.createElement('button');
+        button.textContent = btn.text;
+        button.className = `btn ${btn.class} mb-2 w-100`;
+        button.onclick = () => executeAdminCommand(btn.command);
+        adminPanel.appendChild(button);
+    });
+
+    // Add toggle button
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'admin-toggle';
+    toggleBtn.onclick = toggleAdminPanel;
+    toggleBtn.innerHTML = '<span class="action-icon">⚙️</span>';
+    adminPanel.appendChild(toggleBtn);
+
+    // Update player list periodically
+    setInterval(() => {
+        socket.emit('get_player_info');
+    }, 1000);
+
+    document.body.appendChild(adminPanel);
+}
+
 
 // Game setup
 let canvas, ctx, socket;
@@ -403,7 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (ammoCounter) {
             const weapon = WEAPONS[player.currentWeapon];
-            ammoCounter.textContent = weapon.ammo !== undefined ? 
+            ammoCounter.textContent = weapon.ammo !== undefined ?
                 `${weapon.ammo}/${weapon.maxAmmo}` : '∞';
         }
 
@@ -652,94 +714,43 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Connected to server');
     });
 
+    socket.on('game_state', (state) => {
+        gameState.players = state.players;
+        gameState.bullets = state.bullets;
+        gameState.scores = state.scores;
+        gameState.chatMessages = state.chat_messages;
 
-    // Admin UI and commands
-    let adminPanel = null;
-    let selectedTarget = null;
+        // Set admin status only once on initial connection
+        if (!gameState.hasOwnProperty('isAdmin')) {
+            console.log('Setting admin status:', state.is_admin);
+            gameState.isAdmin = state.is_admin;
+            gameState.isModerator = state.is_moderator;
 
-    function createAdminPanel() {
-        // Don't create a new panel if one already exists
-        if (document.querySelector('.admin-panel')) {
-            return;
+            // Create admin panel if user is admin
+            if (state.is_admin) {
+                console.log('Creating admin panel');
+                createAdminPanel();
+            }
         }
 
-        const adminPanel = document.createElement('div');
-        adminPanel.className = 'admin-panel';
+        updateUI();
+    });
 
-        // Update player list periodically
-        setInterval(() => {
-            socket.emit('get_player_info');
-        }, 1000);
+    socket.on('player_info', (data) => {
+        const playerList = document.getElementById('playerList');
+        if (!playerList) return;
 
-        socket.on('player_info', (data) => {
-            const playerList = document.getElementById('playerList');
-            if (!playerList) return;
-
-            playerList.innerHTML = '';
-            data.players.forEach(player => {
-                if (player.id !== socket.id) {  // Don't include self
-                    const option = document.createElement('option');
-                    option.value = player.id;
-                    option.textContent = `${player.username} (HP: ${player.health})`;
-                    playerList.appendChild(option);
-                }
-            });
+        playerList.innerHTML = '<option value="">Select Player</option>';
+        data.players.forEach(player => {
+            if (player.id !== socket.id) {  // Don't include self
+                const option = document.createElement('option');
+                option.value = player.id;
+                option.textContent = `${player.username} (HP: ${player.health})`;
+                playerList.appendChild(option);
+            }
         });
+    });
 
-        // Add buttons based on permissions
-        if (gameState.isAdmin) {
-            const killButton = document.createElement('button');
-            killButton.textContent = 'Instant Kill';
-            killButton.className = 'btn btn-danger mb-2 w-100';
-            killButton.onclick = () => executeAdminCommand('kill');
-            adminPanel.appendChild(killButton);
-
-            const godModeButton = document.createElement('button');
-            godModeButton.textContent = 'Toggle God Mode';
-            godModeButton.className = 'btn btn-warning mb-2 w-100';
-            godModeButton.onclick = () => executeAdminCommand('god');
-            adminPanel.appendChild(godModeButton);
-
-            const modButton = document.createElement('button');
-            modButton.textContent = 'Toggle Moderator';
-            modButton.className = 'btn btn-info mb-2 w-100';
-            modButton.onclick = () => executeAdminCommand('mod');
-            adminPanel.appendChild(modButton);
-
-            const banButton = document.createElement('button');
-            banButton.textContent = 'Ban Player';
-            banButton.className = 'btn btn-danger mb-2 w-100';
-            banButton.onclick = () => executeAdminCommand('ban');
-            adminPanel.appendChild(banButton);
-        }
-
-        // Buttons for both admins and moderators
-        const kickButton = document.createElement('button');
-        kickButton.textContent = 'Kick Player';
-        kickButton.className = 'btn btn-warning mb-2 w-100';
-        kickButton.onclick = () => executeAdminCommand('kick');
-        adminPanel.appendChild(kickButton);
-
-        const muteButton = document.createElement('button');
-        muteButton.textContent = 'Mute Player';
-        muteButton.className = 'btn btn-secondary mb-2 w-100';
-        muteButton.onclick = () => executeAdminCommand('mute');
-        adminPanel.appendChild(muteButton);
-
-        const playerListSelect = document.createElement('select');
-        playerListSelect.id = 'playerList';
-        playerListSelect.className = 'form-select mb-2';
-        playerListSelect.innerHTML = '<option value="">Select Player</option>';
-        adminPanel.appendChild(playerListSelect);
-
-        const adminToggle = document.createElement('button');
-        adminToggle.className = 'admin-toggle';
-        adminToggle.onclick = toggleAdminPanel;
-        adminToggle.innerHTML = '<span class="action-icon">⚙️</span>';
-        adminPanel.appendChild(adminToggle);
-
-        document.body.appendChild(adminPanel);
-    }
 
     // Add chat UI
     function createChatUI() {
@@ -801,28 +812,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             alert('God mode disabled');
         }
-    });
-
-    socket.on('game_state', (state) => {
-        gameState.players = state.players;
-        gameState.bullets = state.bullets.map(b => new Bullet(
-            b.x, b.y, b.angle, BULLET_SPEED, b.damage, b.weapon, b.shooter
-        ));
-        gameState.scores = state.scores;
-        gameState.chatMessages = state.chat_messages;
-
-        // Preserve admin status from initial page load
-        if (!gameState.hasOwnProperty('isAdmin')) {
-            gameState.isAdmin = state.is_admin;
-            gameState.isModerator = state.is_moderator;
-
-            // Create admin panel only on first state update if admin
-            if (state.is_admin && !document.querySelector('.admin-panel')) {
-                createAdminPanel();
-            }
-        }
-
-        updateUI();
     });
 
     socket.on('player_hit', (data) => {

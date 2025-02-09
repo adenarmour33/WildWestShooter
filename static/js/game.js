@@ -771,6 +771,59 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Command processing functions moved inside DOMContentLoaded
+    function processCommand(command) {
+        // Remove the leading slash if present
+        const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
+
+        if (cmd === 'help') {
+            return `Available commands:
+        /help - Show this help message
+        /kill <player_id> - Admin only: Kill specified player
+        /god <player_id> - Admin only: Toggle god mode for player
+        /kick <player_id> - Mod only: Kick player from game
+        /mute <player_id> <duration> - Mod only: Mute player
+        /ban <player_id> - Admin only: Ban player`;
+        }
+
+        const [action, ...args] = cmd.split(' ');
+        const targetId = args[0];  // First argument is now the player ID
+
+        // Check if user is authenticated
+        if (!gameState.userId) {
+            return 'Error: You must be logged in to use commands.';
+        }
+
+        // Check permissions and execute command
+        switch(action) {
+            case 'kill':
+            case 'god':
+            case 'ban':
+                if (!gameState.isAdmin) {
+                    return 'You do not have permission to use this command.';
+                }
+                if (!targetId) {
+                    return `${action} command requires a player ID.`;
+                }
+                executeAdminCommand(action, targetId);
+                return `Executing ${action} command on player ${targetId}`;
+
+            case 'kick':
+            case 'mute':
+                if (!gameState.isAdmin && !gameState.isModerator) {
+                    return 'You do not have permission to use this command.';
+                }
+                if (!targetId) {
+                    return `${action} command requires a player ID.`;
+                }
+                executeAdminCommand(action, targetId);
+                return `Executing ${action} command on player ${targetId}`;
+
+            default:
+                return 'Unknown command. Type /help for available commands.';
+        }
+    }
+
     socket.on('game_state', (state) => {
         console.log('Received game state:', state);
 
@@ -835,7 +888,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 bottom: 20px;
                 width: 300px;
                 height: 200px;
-                background: rgba(0, 0, 0, 0.8);
+                background: rgba(0, 0,0, 0.8);
                 border-radius: 5px;
                 display: flex;
                 flex-direction: column;
@@ -888,8 +941,9 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="command-input-container">
                 <span class="command-prompt">/</span>
                 <input type="text" class="command-input" placeholder="Enter command...">
-            </div>        `;
-        document.body.appendChildcmdContainer);
+            </div>
+        `;
+        document.body.appendChild(cmdContainer);
 
         const cmdInput = cmdContainer.querySelector('.command-input');
 
@@ -920,7 +974,8 @@ document.addEventListener('DOMContentLoaded', () => {
             .command-input {
                 flex: 1;
                 background: transparent;
-                border: none;color: #fff;
+                border: none;
+                color: #fff;
                 font-family: monospace;
                 font-size: 16px;
                 outline: none;
@@ -931,10 +986,75 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         document.head.appendChild(style);
 
+        // Set up command input handling
+        cmdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && cmdInput.value.trim()) {
+                const result = processCommand(cmdInput.value.trim());
+                if (result) {
+                    // Display command result
+                    const resultElement = document.createElement('div');
+                    resultElement.style.cssText = `
+                        position: fixed;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        background: rgba(0, 0, 0, 0.8);
+                        color: white;
+                        padding: 10px 20px;
+                        border-radius: 5px;
+                        z-index: 1001;
+                    `;
+                    resultElement.textContent = result;
+                    document.body.appendChild(resultElement);
+                    setTimeout(() => document.body.removeChild(resultElement), 3000);
+                }
+                cmdInput.value = '';
+                cmdContainer.style.display = 'none';
+            }
+        });
+
+        // Toggle command line with forward slash
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '/' && document.activeElement !== cmdInput) {
+                e.preventDefault();
+                cmdContainer.style.display = cmdContainer.style.display === 'none' ? 'block' : 'none';
+                if (cmdContainer.style.display === 'block') {
+                    cmdInput.focus();
+                }
+            }
+        });
+
         return { cmdContainer, cmdInput };
     }
 
-    // Command processing
+    // Initialize command line interface within DOMContentLoaded
+    const { cmdContainer, cmdInput } = createCommandLine();
+
+    // Socket events
+    socket.on('connect', () => {
+        console.log('Connected to server');
+
+        // Request authentication status immediately after connection
+        socket.emit('authenticate');
+    });
+
+    socket.on('authentication_response', (data) => {
+        console.log('Authentication response:', data);
+        if (data.user_id) {
+            gameState.userId = data.user_id;
+            gameState.isAdmin = data.is_admin || false;
+            console.log('User authenticated:', {
+                userId: gameState.userId,
+                isAdmin: gameState.isAdmin
+            });
+
+            if (gameState.isAdmin) {
+                createAdminPanel();
+            }
+        }
+    });
+
+    // Command processing functions moved inside DOMContentLoaded
     function processCommand(command) {
         // Remove the leading slash if present
         const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
@@ -952,18 +1072,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const [action, ...args] = cmd.split(' ');
         const targetId = args[0];  // First argument is now the player ID
 
-        console.log('Processing command:', action);
-        console.log('Current user ID:', gameState.userId);
-        console.log('Is admin:', gameState.isAdmin);
-        console.log('Admin IDs:', [...gameState.adminIds]);
-
-        // First check permissions using user ID
+        // Check if user is authenticated
         if (!gameState.userId) {
-            console.error('User ID not found in gameState:', gameState);
-            return 'Error: User ID not found. Please try reconnecting.';
+            return 'Error: You must be logged in to use commands.';
         }
 
-        // Check admin status using ID
+        // Check permissions and execute command
         switch(action) {
             case 'kill':
             case 'god':
@@ -972,10 +1086,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     return 'You do not have permission to use this command.';
                 }
                 if (!targetId) {
-                    return 'Please specify a player ID.';
+                    return `${action} command requires a player ID.`;
                 }
                 executeAdminCommand(action, targetId);
-                return `Executing ${action} command on player ${targetId}...`;
+                return `Executing ${action} command on player ${targetId}`;
 
             case 'kick':
             case 'mute':
@@ -983,16 +1097,50 @@ document.addEventListener('DOMContentLoaded', () => {
                     return 'You do not have permission to use this command.';
                 }
                 if (!targetId) {
-                    return 'Please specify a player ID.';
+                    return `${action} command requires a player ID.`;
                 }
                 executeAdminCommand(action, targetId);
-                return `Executing ${action} command on player ${targetId}...`;
+                return `Executing ${action} command on player ${targetId}`;
 
             default:
                 return 'Unknown command. Type /help for available commands.';
         }
     }
 
+    socket.on('game_state', (state) => {
+        console.log('Received game state:', state);
+
+        // Store all relevant state information
+        gameState.players = state.players || {};
+        gameState.bullets = state.bullets || [];
+        gameState.scores = state.scores || {};
+        gameState.chatMessages = state.chat_messages || [];
+
+        // Update player list if admin panel exists
+        const playerList = document.getElementById('playerList');
+        if (playerList && Object.keys(gameState.players).length > 0) {
+            updatePlayerList();
+        }
+
+        updateUI();
+    });
+
+    function updatePlayerList() {
+        const playerList = document.getElementById('playerList');
+        if (!playerList) return;
+
+        playerList.innerHTML = '<option value="">Select Player</option>';
+        Object.entries(gameState.players).forEach(([id, player]) => {
+            if (id !== gameState.userId) {  // Don't include self
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = `${player.username} (ID: ${id})`;
+                playerList.appendChild(option);
+            }
+        });
+    }
+
+    // Add chat UI
     const chatUI = createChatUI();
     const commandLine = createCommandLine();
 
@@ -1071,8 +1219,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     });
 
-    // Other socket events remain unchanged
-    updateUI();
+    // Start the game loop
     requestAnimationFrame(gameLoop);
 });
 
@@ -1086,61 +1233,4 @@ let joystick = {
     deltaY: 0
 };
 
-// Update processCommand function
-function processCommand(command) {
-    // Remove the leading slash if present
-    const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
-
-    if (cmd === 'help') {
-        return `Available commands:
-        /help - Show this help message
-        /kill <player_id> - Admin only: Kill specified player
-        /god <player_id> - Admin only: Toggle god mode for player
-        /kick <player_id> - Mod only: Kick player from game
-        /mute <player_id> <duration> - Mod only: Mute player
-        /ban <player_id> - Admin only: Ban player`;
-    }
-
-    const [action, ...args] = cmd.split(' ');
-    const targetId = args[0];  // First argument is now the player ID
-
-    console.log('Processing command:', action);
-    console.log('Current user ID:', gameState.userId);
-    console.log('Is admin:', gameState.isAdmin);
-    console.log('Admin IDs:', [...gameState.adminIds]);
-
-    // First check permissions using user ID
-    if (!gameState.userId) {
-        console.error('User ID not found in gameState:', gameState);
-        return 'Error: User ID not found. Please try reconnecting.';
-    }
-
-    // Check admin status using ID
-    switch(action) {
-        case 'kill':
-        case 'god':
-        case 'ban':
-            if (!gameState.isAdmin) {
-                return 'You do not have permission to use this command.';
-            }
-            if (!targetId) {
-                return 'Please specify a player ID.';
-            }
-            executeAdminCommand(action, targetId);
-            return `Executing ${action} command on player ${targetId}...`;
-
-        case 'kick':
-        case 'mute':
-            if (!gameState.isAdmin && !gameState.isModerator) {
-                return 'You do not have permission to use this command.';
-            }
-            if (!targetId) {
-                return 'Please specify a player ID.';
-            }
-            executeAdminCommand(action, targetId);
-            return `Executing ${action} command on player ${targetId}...`;
-
-        default:
-            return 'Unknown command. Type /help for available commands.';
-    }
-}
+//The function processCommand is already moved inside the DOMContentLoaded event listener.

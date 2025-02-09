@@ -552,27 +552,29 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedTarget = null;
 
     function createAdminPanel() {
-        if (!gameState.isAdmin && !gameState.isModerator) return;
+        const adminPanel = document.querySelector('.admin-panel');
+        if (!adminPanel || (!gameState.isAdmin && !gameState.isModerator)) return;
 
-        adminPanel = document.createElement('div');
-        adminPanel.className = 'admin-panel';
-        adminPanel.style.cssText = `
-            position: fixed;
-            right: 10px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            color: white;
-            z-index: 1000;
-        `;
+        // Update player list periodically
+        setInterval(() => {
+            socket.emit('get_player_info');
+        }, 1000);
 
-        const playerList = document.createElement('select');
-        playerList.style.marginBottom = '10px';
-        playerList.addEventListener('change', (e) => {
-            selectedTarget = e.target.value;
+        socket.on('player_info', (data) => {
+            const playerList = document.getElementById('playerList');
+            if (!playerList) return;
+
+            playerList.innerHTML = '';
+            data.players.forEach(player => {
+                if (player.id !== socket.id) {  // Don't include self
+                    const option = document.createElement('option');
+                    option.value = player.id;
+                    option.textContent = `${player.username} (HP: ${player.health})`;
+                    playerList.appendChild(option);
+                }
+            });
         });
+
 
         // Add buttons based on permissions
         if (gameState.isAdmin) {
@@ -668,25 +670,22 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         adminPanel.appendChild(muteButton);
 
-        adminPanel.appendChild(playerList);
-        document.body.appendChild(adminPanel);
-
-        // Update player list periodically
-        setInterval(() => {
-            socket.emit('get_player_info');
-        }, 1000);
-
-        socket.on('player_info', (data) => {
-            playerList.innerHTML = '';
-            data.players.forEach(player => {
-                if (player.id !== socket.id) {  // Don't include self
-                    const option = document.createElement('option');
-                    option.value = player.id;
-                    option.textContent = `${player.username} (HP: ${player.health})`;
-                    playerList.appendChild(option);
-                }
-            });
+        const playerList = document.createElement('select');
+        playerList.id = 'playerList';
+        playerList.style.marginBottom = '10px';
+        playerList.addEventListener('change', (e) => {
+            selectedTarget = e.target.value;
         });
+        adminPanel.appendChild(playerList);
+
+        document.body.appendChild(adminPanel);
+    }
+
+    function toggleAdminPanel() {
+        const adminPanel = document.querySelector('.admin-panel');
+        if (adminPanel) {
+            adminPanel.classList.toggle('active');
+        }
     }
 
     // Add chat UI

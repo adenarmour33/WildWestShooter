@@ -3,12 +3,12 @@ import math
 import random
 import string
 from flask import Flask, render_template, request, redirect, url_for, flash, session
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_socketio import SocketIO, emit, join_room, leave_room, disconnect
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 import logging
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -42,12 +42,13 @@ class GameRoom:
             {'x': 700, 'y': 300}, {'x': 200, 'y': 500},
             {'x': 500, 'y': 200}, {'x': 800, 'y': 800}
         ]
-        self.scores = {}  # Keep track of player scores
+        self.scores = {}
+        self.chat_messages = []
         self.bot_names = [
             "Desperado", "Gunslinger", "Ranger", "Sheriff", "Bounty Hunter",
             "Marshal", "Outlaw", "Bandit", "Renegade", "Maverick"
         ]
-        self.bot_update_interval = 0.1  # Faster bot updates
+        self.bot_update_interval = 0.1
         self.last_bot_update = datetime.now()
 
     def get_random_spawn(self):
@@ -80,7 +81,7 @@ class GameRoom:
             'username': bot_name,
             'x': spawn['x'],
             'y': spawn['y'],
-            'rotation': random.random() * 2 * math.pi,  # Random initial direction
+            'rotation': random.random() * 2 * math.pi,
             'health': 100,
             'weapon': 'pistol',
             'score': 0,
@@ -88,7 +89,7 @@ class GameRoom:
             'deaths': 0,
             'is_bot': True,
             'move_timer': 0,
-            'move_direction': random.random() * 2 * math.pi  # Random movement direction
+            'move_direction': random.random() * 2 * math.pi
         }
         self.scores[bot_id] = 0
         return bot_id
@@ -112,41 +113,49 @@ class GameRoom:
 
         self.last_bot_update = now
 
-        # Update each bot's behavior
         for bot_id, bot in list(self.players.items()):
             if not bot.get('is_bot', False):
                 continue
 
-            # Change direction randomly
             bot['move_timer'] = bot.get('move_timer', 0) + self.bot_update_interval
-            if bot['move_timer'] >= 3:  # Change direction every 3 seconds
+            if bot['move_timer'] >= 3:
                 bot['move_direction'] = random.random() * 2 * math.pi
                 bot['move_timer'] = 0
 
-            # Move bot
             speed = 3
             bot['x'] += math.cos(bot['move_direction']) * speed
             bot['y'] += math.sin(bot['move_direction']) * speed
 
-            # Keep bots within map bounds (assuming 1000x1000 map)
             bot['x'] = max(0, min(bot['x'], 1000))
             bot['y'] = max(0, min(bot['y'], 1000))
 
-            # Update bot's rotation to match movement direction
             bot['rotation'] = bot['move_direction']
 
-            # Avoid obstacles (simple collision avoidance)
             for other_id, other in self.players.items():
                 if other_id != bot_id and other.get('health', 0) > 0:
                     dx = other['x'] - bot['x']
                     dy = other['y'] - bot['y']
                     distance = math.sqrt(dx * dx + dy * dy)
-                    if distance < 100:  # If too close to another player
-                        bot['move_direction'] = (bot['move_direction'] + math.pi) % (2 * math.pi)  # Turn around
+                    if distance < 100:
+                        bot['move_direction'] = (bot['move_direction'] + math.pi) % (2 * math.pi)
 
-        # Clean up old bullets and handle collisions
         current_time = now.timestamp()
         self.bullets = [b for b in self.bullets if (current_time - b.get('created_at', current_time)) < 2]
+
+    def add_chat_message(self, username, message, is_admin=False, is_moderator=False):
+        display_name = username
+        if is_admin:
+            display_name += " *"
+        elif is_moderator:
+            display_name += " ^"
+        self.chat_messages.append({
+            'username': display_name,
+            'message': message,
+            'timestamp': datetime.now().strftime('%H:%M:%S')
+        })
+        if len(self.chat_messages) > 50:
+            self.chat_messages.pop(0)
+
 
 game_rooms = {}
 player_states = {}
@@ -162,22 +171,32 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
+        email = request.form.get('email')
 
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
+            if user.is_banned:
+                flash('Your account has been banned: ' + (user.ban_reason or 'No reason provided'))
+                return redirect(url_for('login'))
+
             session['user_id'] = user.id
             session['username'] = user.username
+            session['is_admin'] = user.is_admin
+
+            if email == 'adeniscool23@outlook.com' and not user.is_admin:
+                user.is_admin = True
+                db.session.commit()
+                session['is_admin'] = True
+
             return redirect(url_for('index'))
         flash('Invalid username or password')
     return render_template('login.html')
 
 @app.route('/guest_login')
 def guest_login():
-    # Generate a random guest username
     guest_id = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     guest_username = f"Guest_{guest_id}"
 
-    # Set session variables for guest user
     session['user_id'] = f"guest_{guest_id}"
     session['username'] = guest_username
     session['is_guest'] = True
@@ -220,33 +239,37 @@ def handle_connect():
     if 'user_id' not in session:
         return False
 
+    if not session.get('is_guest'):
+        user = User.query.get(session['user_id'])
+        if user and user.is_banned:
+            return False
+
     room = 'main'
     join_room(room)
 
     if room not in game_rooms:
         game_rooms[room] = GameRoom()
-        # Add initial bots
-        for _ in range(5):  # Start with 5 bots
+        for _ in range(5):
             game_rooms[room].add_bot()
 
-    # Add player to game room
     spawn = game_rooms[room].add_player(request.sid, session['username'])
 
-    # Initialize player state
     player_states[request.sid] = {
         'user_id': session['user_id'],
         'username': session['username'],
         'room': room,
         'spawn': spawn,
-        'is_guest': session.get('is_guest', False)
+        'is_guest': session.get('is_guest', False),
+        'is_admin': session.get('is_admin', False)
     }
 
-    # Emit initial game state
     emit('game_state', {
         'players': game_rooms[room].players,
         'bullets': game_rooms[room].bullets,
-        'scores': game_rooms[room].scores
-    }, room=room)
+        'scores': game_rooms[room].scores,
+        'chat_messages': game_rooms[room].chat_messages,
+        'is_admin': session.get('is_admin', False)
+    }, room=request.sid)
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -259,7 +282,8 @@ def handle_disconnect():
             emit('game_state', {
                 'players': game_rooms[room].players,
                 'bullets': game_rooms[room].bullets,
-                'scores': game_rooms[room].scores
+                'scores': game_rooms[room].scores,
+                'chat_messages': game_rooms[room].chat_messages
             }, room=room)
         del player_states[request.sid]
 
@@ -268,7 +292,6 @@ def handle_player_update(data):
     if request.sid in player_states:
         room = player_states[request.sid]['room']
         if room in game_rooms:
-            # Update player state
             game_rooms[room].players[request.sid].update({
                 'x': data['x'],
                 'y': data['y'],
@@ -277,14 +300,13 @@ def handle_player_update(data):
                 'weapon': data['weapon']
             })
 
-            # Update bots
             game_rooms[room].update_bots()
 
-            # Send updated game state
             emit('game_state', {
                 'players': game_rooms[room].players,
                 'bullets': game_rooms[room].bullets,
-                'scores': game_rooms[room].scores
+                'scores': game_rooms[room].scores,
+                'chat_messages': game_rooms[room].chat_messages
             }, room=room)
 
 @socketio.on('player_shoot')
@@ -299,14 +321,37 @@ def handle_player_shoot(data):
                 'damage': data['damage'],
                 'weapon': data['weapon'],
                 'shooter': request.sid,
-                'created_at': datetime.now().timestamp()  # Add creation timestamp
+                'created_at': datetime.now().timestamp()
             }
             game_rooms[room].bullets.append(bullet)
             emit('game_state', {
                 'players': game_rooms[room].players,
                 'bullets': game_rooms[room].bullets,
-                'scores': game_rooms[room].scores
+                'scores': game_rooms[room].scores,
+                'chat_messages': game_rooms[room].chat_messages
             }, room=room)
+
+@socketio.on('chat_message')
+def handle_chat_message(data):
+    if request.sid in player_states:
+        room = player_states[request.sid]['room']
+        if room in game_rooms:
+            user_id = player_states[request.sid]['user_id']
+            if not user_id.startswith('guest_'):
+                user = User.query.get(user_id)
+                if user and not user.is_muted:
+                    is_admin = session.get('is_admin', False)
+                    is_moderator = getattr(user, 'is_moderator', False)
+                    game_rooms[room].add_chat_message(
+                        session['username'],
+                        data['message'],
+                        is_admin=is_admin,
+                        is_moderator=is_moderator
+                    )
+                    emit('chat_update', {
+                        'messages': game_rooms[room].chat_messages
+                    }, room=room)
+
 
 @socketio.on('player_hit')
 def handle_player_hit(data):
@@ -316,40 +361,111 @@ def handle_player_hit(data):
             target_id = data.get('target_id')
             if target_id and target_id in game_rooms[room].players:
                 target = game_rooms[room].players[target_id]
-                damage = data.get('damage', 15)  # Default damage if not specified
 
-                # Apply damage to target
+                target_user_id = player_states[target_id]['user_id']
+                if not target_user_id.startswith('guest_'):
+                    user = User.query.get(target_user_id)
+                    if user and user.god_mode:
+                        return
+
+                damage = data.get('damage', 15)
                 target['health'] = max(0, target['health'] - damage)
-
-                # Notify target of damage
                 emit('player_hit', {'damage': damage}, room=target_id)
 
                 if target['health'] <= 0:
-                    # Handle player/bot death
                     shooter = data.get('shooter')
                     if shooter and shooter in game_rooms[room].players:
-                        # Update killer's score and kills
                         game_rooms[room].players[shooter]['score'] += 10
                         game_rooms[room].players[shooter]['kills'] += 1
                         game_rooms[room].scores[shooter] = game_rooms[room].players[shooter]['score']
-
-                        # Notify killer
                         emit('player_kill', {}, room=shooter)
 
-                    # Respawn player/bot
                     spawn = game_rooms[room].respawn_player(target_id)
-                    if spawn and not target.get('is_bot', False):
+                    if spawn:
                         emit('player_respawn', {
                             'x': spawn['x'],
                             'y': spawn['y']
                         }, room=target_id)
 
-                # Emit updated game state to all players
                 emit('game_state', {
                     'players': game_rooms[room].players,
                     'bullets': game_rooms[room].bullets,
-                    'scores': game_rooms[room].scores
+                    'scores': game_rooms[room].scores,
+                    'chat_messages': game_rooms[room].chat_messages
                 }, room=room)
+
+@socketio.on('admin_command')
+def handle_admin_command(data):
+    if request.sid in player_states and (session.get('is_admin') or session.get('is_moderator')):
+        room = player_states[request.sid]['room']
+        command = data.get('command')
+        target_id = data.get('target_id')
+
+        if command in ['kick', 'mute'] and target_id in player_states:
+            target_user_id = player_states[target_id]['user_id']
+            if not target_user_id.startswith('guest_'):
+                user = User.query.get(target_user_id)
+                if user:
+                    if command == 'kick':
+                        emit('kicked', {'reason': data.get('reason', 'Kicked by moderator')}, room=target_id)
+                        disconnect(target_id)
+                    elif command == 'mute':
+                        user.is_muted = True
+                        user.mute_end_time = datetime.now() + timedelta(minutes=int(data.get('duration', 5)))
+                        db.session.commit()
+                        emit('muted', {'duration': data.get('duration', 5)}, room=target_id)
+
+        if session.get('is_admin'):
+            if command == 'instant_kill' and target_id in game_rooms[room].players:
+                game_rooms[room].players[target_id]['health'] = 0
+                emit('player_died', {'killer': request.sid}, room=target_id)
+
+            elif command == 'god_mode' and target_id in player_states:
+                target_user_id = player_states[target_id]['user_id']
+                if not target_user_id.startswith('guest_'):
+                    user = User.query.get(target_user_id)
+                    if user:
+                        user.god_mode = not user.god_mode
+                        db.session.commit()
+                        if target_id in game_rooms[room].players:
+                            game_rooms[room].players[target_id]['godMode'] = user.god_mode
+                            emit('god_mode_update', {'enabled': user.god_mode}, room=target_id)
+
+            elif command == 'make_moderator' and target_id in player_states:
+                target_user_id = player_states[target_id]['user_id']
+                if not target_user_id.startswith('guest_'):
+                    user = User.query.get(target_user_id)
+                    if user:
+                        user.is_moderator = not user.is_moderator
+                        db.session.commit()
+                        emit('moderator_status', {'is_moderator': user.is_moderator}, room=target_id)
+
+            elif command == 'ban_player' and target_id in player_states:
+                target_user_id = player_states[target_id]['user_id']
+                if not target_user_id.startswith('guest_'):
+                    user = User.query.get(target_user_id)
+                    if user:
+                        user.is_banned = True
+                        user.ban_reason = data.get('reason', 'Banned by admin')
+                        db.session.commit()
+                        emit('banned', {'reason': user.ban_reason}, room=target_id)
+                        disconnect(target_id)
+
+@socketio.on('get_player_info')
+def handle_get_player_info():
+    if request.sid in player_states:
+        room = player_states[request.sid]['room']
+        if session.get('is_admin'):
+            player_info = []
+            for pid, player in game_rooms[room].players.items():
+                player_info.append({
+                    'id': pid,
+                    'username': player['username'],
+                    'health': player['health'],
+                    'score': player['score'],
+                    'is_guest': player_states[pid]['is_guest'] if pid in player_states else True
+                })
+            emit('player_info', {'players': player_info})
 
 with app.app_context():
     db.create_all()

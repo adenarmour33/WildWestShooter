@@ -146,7 +146,10 @@ document.addEventListener('DOMContentLoaded', () => {
         players: {},
         bullets: [],
         localBullets: [],
-        scores: {}
+        scores: {},
+        isAdmin: false,
+        isModerator: false,
+        chatMessages: []
     };
 
     // UI elements
@@ -370,7 +373,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-
     function update(deltaTime) {
         if (player.health <= 0) return;
 
@@ -544,12 +546,225 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Connected to server');
     });
 
+
+    // Admin UI and commands
+    let adminPanel = null;
+    let selectedTarget = null;
+
+    function createAdminPanel() {
+        if (!gameState.isAdmin && !gameState.isModerator) return;
+
+        adminPanel = document.createElement('div');
+        adminPanel.className = 'admin-panel';
+        adminPanel.style.cssText = `
+            position: fixed;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+            z-index: 1000;
+        `;
+
+        const playerList = document.createElement('select');
+        playerList.style.marginBottom = '10px';
+        playerList.addEventListener('change', (e) => {
+            selectedTarget = e.target.value;
+        });
+
+        // Add buttons based on permissions
+        if (gameState.isAdmin) {
+            const killButton = document.createElement('button');
+            killButton.textContent = 'Instant Kill';
+            killButton.className = 'btn btn-danger mb-2';
+            killButton.onclick = () => {
+                if (selectedTarget) {
+                    socket.emit('admin_command', {
+                        command: 'instant_kill',
+                        target_id: selectedTarget
+                    });
+                }
+            };
+            adminPanel.appendChild(killButton);
+
+            const godModeButton = document.createElement('button');
+            godModeButton.textContent = 'Toggle God Mode';
+            godModeButton.className = 'btn btn-warning mb-2';
+            godModeButton.onclick = () => {
+                if (selectedTarget) {
+                    socket.emit('admin_command', {
+                        command: 'god_mode',
+                        target_id: selectedTarget
+                    });
+                }
+            };
+            adminPanel.appendChild(godModeButton);
+
+            const modButton = document.createElement('button');
+            modButton.textContent = 'Toggle Moderator';
+            modButton.className = 'btn btn-info mb-2';
+            modButton.onclick = () => {
+                if (selectedTarget) {
+                    socket.emit('admin_command', {
+                        command: 'make_moderator',
+                        target_id: selectedTarget
+                    });
+                }
+            };
+            adminPanel.appendChild(modButton);
+
+            const banButton = document.createElement('button');
+            banButton.textContent = 'Ban Player';
+            banButton.className = 'btn btn-danger mb-2';
+            banButton.onclick = () => {
+                if (selectedTarget) {
+                    const reason = prompt('Enter ban reason:');
+                    if (reason) {
+                        socket.emit('admin_command', {
+                            command: 'ban_player',
+                            target_id: selectedTarget,
+                            reason: reason
+                        });
+                    }
+                }
+            };
+            adminPanel.appendChild(banButton);
+        }
+
+        // Buttons for both admins and moderators
+        const kickButton = document.createElement('button');
+        kickButton.textContent = 'Kick Player';
+        kickButton.className = 'btn btn-warning mb-2';
+        kickButton.onclick = () => {
+            if (selectedTarget) {
+                const reason = prompt('Enter kick reason:');
+                if (reason) {
+                    socket.emit('admin_command', {
+                        command: 'kick',
+                        target_id: selectedTarget,
+                        reason: reason
+                    });
+                }
+            }
+        };
+        adminPanel.appendChild(kickButton);
+
+        const muteButton = document.createElement('button');
+        muteButton.textContent = 'Mute Player';
+        muteButton.className = 'btn btn-secondary mb-2';
+        muteButton.onclick = () => {
+            if (selectedTarget) {
+                const duration = prompt('Enter mute duration (minutes):', '5');
+                if (duration) {
+                    socket.emit('admin_command', {
+                        command: 'mute',
+                        target_id: selectedTarget,
+                        duration: duration
+                    });
+                }
+            }
+        };
+        adminPanel.appendChild(muteButton);
+
+        adminPanel.appendChild(playerList);
+        document.body.appendChild(adminPanel);
+
+        // Update player list periodically
+        setInterval(() => {
+            socket.emit('get_player_info');
+        }, 1000);
+
+        socket.on('player_info', (data) => {
+            playerList.innerHTML = '';
+            data.players.forEach(player => {
+                if (player.id !== socket.id) {  // Don't include self
+                    const option = document.createElement('option');
+                    option.value = player.id;
+                    option.textContent = `${player.username} (HP: ${player.health})`;
+                    playerList.appendChild(option);
+                }
+            });
+        });
+    }
+
+    // Add chat UI
+    function createChatUI() {
+        const chatContainer = document.createElement('div');
+        chatContainer.className = 'chat-container';
+        chatContainer.innerHTML = `
+            <div class="chat-messages"></div>
+            <div class="chat-input-container">
+                <input type="text" class="chat-input" placeholder="Press Enter to chat...">
+            </div>
+        `;
+        document.body.appendChild(chatContainer);
+
+        const chatInput = chatContainer.querySelector('.chat-input');
+        const chatMessages = chatContainer.querySelector('.chat-messages');
+
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && chatInput.value.trim()) {
+                socket.emit('chat_message', { message: chatInput.value.trim() });
+                chatInput.value = '';
+            }
+        });
+
+        return { chatMessages };
+    }
+
+    const chatUI = createChatUI();
+
+    socket.on('chat_update', (data) => {
+        chatUI.chatMessages.innerHTML = data.messages.map(msg => `
+            <div class="chat-message">
+                <span class="chat-timestamp">[${msg.timestamp}]</span>
+                <span class="chat-username">${msg.username}:</span>
+                <span class="chat-text">${msg.message}</span>
+            </div>
+        `).join('');
+        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
+    });
+
+    socket.on('muted', (data) => {
+        alert(`You have been muted for ${data.duration} minutes`);
+    });
+
+    socket.on('kicked', (data) => {
+        alert(`You have been kicked: ${data.reason}`);
+        window.location.href = '/';
+    });
+
+    socket.on('moderator_status', (data) => {
+        gameState.isModerator = data.is_moderator;
+        if (data.is_moderator && !adminPanel) {
+            createAdminPanel();
+        }
+    });
+
+    socket.on('god_mode_update', (data) => {
+        if (data.enabled) {
+            alert('God mode enabled');
+        } else {
+            alert('God mode disabled');
+        }
+    });
+
     socket.on('game_state', (state) => {
         gameState.players = state.players;
         gameState.bullets = state.bullets.map(b => new Bullet(
             b.x, b.y, b.angle, BULLET_SPEED, b.damage, b.weapon, b.shooter
         ));
         gameState.scores = state.scores;
+        gameState.isAdmin = state.is_admin;
+        gameState.isModerator = state.is_moderator;
+
+        // Create admin panel if admin and panel doesn't exist
+        if ((state.is_admin || state.is_moderator) && !adminPanel) {
+            createAdminPanel();
+        }
+
         updateUI();
     });
 
@@ -575,6 +790,10 @@ document.addEventListener('DOMContentLoaded', () => {
         player.kills++;
         player.score += 100; // Award points for a kill
         updateUI();
+    });
+    socket.on('banned', (data) => {
+        alert(`You have been banned: ${data.reason}`);
+        window.location.href = '/logout';
     });
 
     updateUI();

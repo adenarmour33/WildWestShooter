@@ -11,14 +11,20 @@ logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or "wild_west_secret"
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///game.db'
+
+# PostgreSQL database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    "pool_recycle": 300,
+    "pool_pre_ping": True,
+}
 
 db = SQLAlchemy(app)
 socketio = SocketIO(app)
 
 # Import models after db initialization
-from models import User, GameSession
+from models import User, GameSession, PlayerStats
 
 # Game state
 game_rooms = {}
@@ -35,7 +41,7 @@ def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
+
         user = User.query.filter_by(username=username).first()
         if user and check_password_hash(user.password_hash, password):
             session['user_id'] = user.id
@@ -48,13 +54,18 @@ def login():
 def register():
     username = request.form.get('username')
     password = request.form.get('password')
-    
+
     if User.query.filter_by(username=username).first():
         flash('Username already exists')
         return redirect(url_for('login'))
-    
+
     user = User(username=username, password_hash=generate_password_hash(password))
     db.session.add(user)
+
+    # Create initial player stats
+    stats = PlayerStats(user=user)
+    db.session.add(stats)
+
     db.session.commit()
     flash('Registration successful')
     return redirect(url_for('login'))
@@ -89,6 +100,14 @@ def handle_connect():
 @socketio.on('disconnect')
 def handle_disconnect():
     if request.sid in player_states:
+        # Update player stats before disconnecting
+        user = User.query.get(session['user_id'])
+        if user:
+            stats = user.stats
+            stats.games_played += 1
+            stats.total_score += player_states[request.sid]['score']
+            db.session.commit()
+
         del player_states[request.sid]
     emit('player_list', list(player_states.values()), broadcast=True)
 

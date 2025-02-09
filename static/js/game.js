@@ -1,3 +1,66 @@
+function executeAdminCommand(command) {
+    const playerList = document.getElementById('playerList');
+    const selectedPlayer = playerList.value;
+
+    if (!selectedPlayer) {
+        alert('Please select a player first');
+        return;
+    }
+
+    switch (command) {
+        case 'kill':
+            socket.emit('admin_command', {
+                command: 'instant_kill',
+                target_id: selectedPlayer
+            });
+            break;
+        case 'god':
+            socket.emit('admin_command', {
+                command: 'god_mode',
+                target_id: selectedPlayer
+            });
+            break;
+        case 'mod':
+            socket.emit('admin_command', {
+                command: 'make_moderator',
+                target_id: selectedPlayer
+            });
+            break;
+        case 'ban':
+            const reason = prompt('Enter ban reason:');
+            if (reason) {
+                socket.emit('admin_command', {
+                    command: 'ban_player',
+                    target_id: selectedPlayer,
+                    reason: reason
+                });
+            }
+            break;
+        case 'kick':
+            const kickReason = prompt('Enter kick reason:');
+            if (kickReason) {
+                socket.emit('admin_command', {
+                    command: 'kick',
+                    target_id: selectedPlayer,
+                    reason: kickReason
+                });
+            }
+            break;
+        case 'mute':
+            const duration = prompt('Enter mute duration (minutes):', '5');
+            if (duration) {
+                socket.emit('admin_command', {
+                    command: 'mute',
+                    target_id: selectedPlayer,
+                    duration: parseInt(duration)
+                });
+            }
+            break;
+        default:
+            console.error('Unknown admin command:', command);
+    }
+}
+
 function toggleAdminPanel() {
     const adminPanel = document.querySelector('.admin-panel');
     if (adminPanel) {
@@ -377,6 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return bullet.active;
         });
     }
+
 
 
     function update(deltaTime) {

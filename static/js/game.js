@@ -95,6 +95,7 @@ function createAdminPanel() {
             justify-content: center;
             z-index: 2000;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            pointer-events: all;
         }
 
         .admin-panel {
@@ -108,6 +109,7 @@ function createAdminPanel() {
             transition: right 0.3s ease;
             z-index: 1999;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            pointer-events: all;
         }
 
         .admin-panel.active {
@@ -133,6 +135,7 @@ function createAdminPanel() {
     // Create panel
     const adminPanel = document.createElement('div');
     adminPanel.className = 'admin-panel';
+    adminPanel.style.pointerEvents = 'all';
 
     // Add content to panel
     const playerList = document.createElement('select');

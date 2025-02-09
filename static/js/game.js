@@ -82,7 +82,7 @@ function createAdminPanel() {
         .admin-toggle {
             position: fixed;
             top: 20px;
-            right: 20px;
+            left: 20px;
             width: 40px;
             height: 40px;
             background: rgba(0, 0, 0, 0.8);
@@ -101,19 +101,19 @@ function createAdminPanel() {
         .admin-panel {
             position: fixed;
             top: 20px;
-            right: -200px;
+            left: -200px;
             width: 200px;
             background: rgba(0, 0, 0, 0.8);
             padding: 15px;
             border-radius: 10px;
-            transition: right 0.3s ease;
+            transition: left 0.3s ease;
             z-index: 1999;
             box-shadow: 0 0 10px rgba(0,0,0,0.5);
             pointer-events: all;
         }
 
         .admin-panel.active {
-            right: 20px;
+            left: 20px;
         }
     `;
     document.head.appendChild(style);

@@ -13,7 +13,7 @@
                         <a class="nav-link" data-bs-toggle="tab" href="#register">Register</a>
                     </li>
                 </ul>
-                
+
                 <div class="tab-content mt-3">
                     <div class="tab-pane fade show active" id="login">
                         <form method="POST" action="{{ url_for('login') }}">
@@ -28,7 +28,7 @@
                             <button type="submit" class="btn btn-primary w-100">Login</button>
                         </form>
                     </div>
-                    
+
                     <div class="tab-pane fade" id="register">
                         <form method="POST" action="{{ url_for('register') }}">
                             <div class="mb-3">
@@ -42,6 +42,13 @@
                             <button type="submit" class="btn btn-primary w-100">Register</button>
                         </form>
                     </div>
+                </div>
+
+                <div class="mt-4 text-center">
+                    <p class="text-muted">- OR -</p>
+                    <a href="{{ url_for('guest_login') }}" class="btn btn-outline-secondary w-100">
+                        Continue as Guest
+                    </a>
                 </div>
             </div>
         </div>

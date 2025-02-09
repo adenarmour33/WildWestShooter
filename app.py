@@ -1,6 +1,7 @@
 import os
 import math
 import random
+import string
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_sqlalchemy import SQLAlchemy
@@ -170,6 +171,19 @@ def login():
         flash('Invalid username or password')
     return render_template('login.html')
 
+@app.route('/guest_login')
+def guest_login():
+    # Generate a random guest username
+    guest_id = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+    guest_username = f"Guest_{guest_id}"
+
+    # Set session variables for guest user
+    session['user_id'] = f"guest_{guest_id}"
+    session['username'] = guest_username
+    session['is_guest'] = True
+
+    return redirect(url_for('index'))
+
 @app.route('/register', methods=['POST'])
 def register():
     username = request.form.get('username')
@@ -223,7 +237,8 @@ def handle_connect():
         'user_id': session['user_id'],
         'username': session['username'],
         'room': room,
-        'spawn': spawn
+        'spawn': spawn,
+        'is_guest': session.get('is_guest', False)
     }
 
     # Emit initial game state

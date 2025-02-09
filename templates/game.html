@@ -15,22 +15,22 @@
         <!-- Minimap -->
         <canvas id="minimap" width="150" height="150"></canvas>
 
-        <!-- Admin Panel -->
-        {% if session.is_admin %}
-<div class="admin-panel">
-    <button class="admin-toggle" onclick="toggleAdminPanel()">
-        <span class="action-icon">⚙️</span>
-    </button>
-    <select id="playerList" class="form-select mb-2">
-        <option value="">Select Player</option>
-    </select>
-    <button class="btn btn-danger mb-2 w-100" onclick="executeAdminCommand('kill')">Instant Kill</button>
-    <button class="btn btn-warning mb-2 w-100" onclick="executeAdminCommand('god')">Toggle God Mode</button>
-    <button class="btn btn-info mb-2 w-100" onclick="executeAdminCommand('mod')">Toggle Moderator</button>
-    <button class="btn btn-danger mb-2 w-100" onclick="executeAdminCommand('ban')">Ban Player</button>
-    <button class="btn btn-warning mb-2 w-100" onclick="executeAdminCommand('kick')">Kick Player</button>
-    <button class="btn btn-secondary mb-2 w-100" onclick="executeAdminCommand('mute')">Mute Player</button>
-</div>
+        <!-- Admin Panel - Only show for admin users -->
+        {% if session.get('is_admin', False) and not session.get('is_guest', False) %}
+        <div class="admin-panel">
+            <button class="admin-toggle" onclick="toggleAdminPanel()">
+                <span class="action-icon">⚙️</span>
+            </button>
+            <select id="playerList" class="form-select mb-2">
+                <option value="">Select Player</option>
+            </select>
+            <button class="btn btn-danger mb-2 w-100" onclick="executeAdminCommand('kill')">Instant Kill</button>
+            <button class="btn btn-warning mb-2 w-100" onclick="executeAdminCommand('god')">Toggle God Mode</button>
+            <button class="btn btn-info mb-2 w-100" onclick="executeAdminCommand('mod')">Toggle Moderator</button>
+            <button class="btn btn-danger mb-2 w-100" onclick="executeAdminCommand('ban')">Ban Player</button>
+            <button class="btn btn-warning mb-2 w-100" onclick="executeAdminCommand('kick')">Kick Player</button>
+            <button class="btn btn-secondary mb-2 w-100" onclick="executeAdminCommand('mute')">Mute Player</button>
+        </div>
         {% endif %}
 
         <!-- Mobile Controls -->

@@ -23,8 +23,8 @@
         <!-- Minimap -->
         <canvas id="minimap" width="150" height="150"></canvas>
 
-        <!-- Admin Panel - Only show for actual admins, not guests -->
-        {% if session.is_admin and not session.is_guest %}
+        <!-- Admin Panel - Show for admins/mods who aren't guests -->
+        {% if (session.is_admin or session.is_moderator) and not session.is_guest %}
         <div class="admin-panel">
             <button class="admin-toggle" onclick="toggleAdminPanel()">
                 <span class="action-icon">⚙️</span>

@@ -331,6 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Update the executeAdminCommand function to handle responses
     function executeAdminCommand(command, targetId) {
         // Check if target exists in players
         if (!gameState.players[targetId]) {
@@ -355,7 +356,12 @@ document.addEventListener('DOMContentLoaded', () => {
         switch(command) {
             case 'kill':
                 socket.emit('admin_command', {
-                    command: 'instant_kill',
+                    command: 'kill',  // Changed from 'instant_kill' to match server expectation
+                    target_id: targetId,
+                    admin_id: gameState.userId
+                });
+                console.log('Sent kill command:', {
+                    command: 'kill',
                     target_id: targetId,
                     admin_id: gameState.userId
                 });
@@ -947,6 +953,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update socket events for admin commands
     socket.on('admin_command_result', (data) => {
+        console.log('Received admin command result:', data);
         const resultElement = document.createElement('div');
         resultElement.style.cssText = `
             position: fixed;
@@ -959,12 +966,23 @@ document.addEventListener('DOMContentLoaded', () => {
             border-radius: 5px;
             z-index: 1001;
         `;
-        resultElement.textContent = data.message;
-        document.body.appendChild(resultElement);
 
-        setTimeout(() => {
-            document.body.removeChild(resultElement);
-        }, 3000);
+        if (data.success) {
+            resultElement.textContent = `Command executed successfully: ${data.message || ''}`;
+
+            // Update the player's state if it's a kill command
+            if (data.command === 'kill' && data.target_id) {
+                if (gameState.players[data.target_id]) {
+                    gameState.players[data.target_id].health = 0;
+                    updateUI();
+                }
+            }
+        } else {
+            resultElement.textContent = `Command failed: ${data.error || 'Unknown error'}`;
+        }
+
+        document.body.appendChild(resultElement);
+        setTimeout(() => document.body.removeChild(resultElement), 3000);
     });
 
     // Start the game loop

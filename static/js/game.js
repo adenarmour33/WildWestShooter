@@ -15,7 +15,7 @@ let gameState = {
     isModerator: false
 };
 
-// Camera setup
+// Camera setup with initial values
 let camera = {
     x: 0,
     y: 0,
@@ -91,7 +91,6 @@ function handleCommand(command) {
         return;
     }
 
-    // Command processing
     switch(cmd) {
         case '/kill':
             if (!args[1]) return alert('Usage: /kill [player]');
@@ -138,7 +137,43 @@ function handleCommand(command) {
     }
 }
 
-// Initialize game after DOM is loaded
+// Game rendering functions
+function drawBackground() {
+    // Fill the visible area with grass tiles
+    const startX = Math.floor(camera.x / tileSize) * tileSize;
+    const startY = Math.floor(camera.y / tileSize) * tileSize;
+    const endX = startX + camera.width + tileSize;
+    const endY = startY + camera.height + tileSize;
+
+    for (let x = startX; x < endX; x += tileSize) {
+        for (let y = startY; y < endY; y += tileSize) {
+            ctx.drawImage(assets.tiles.grass, x - camera.x, y - camera.y, tileSize, tileSize);
+        }
+    }
+}
+
+function drawPlayers() {
+    Object.values(gameState.players).forEach(p => {
+        ctx.save();
+        ctx.translate(p.x - camera.x, p.y - camera.y);
+        ctx.drawImage(assets.player, -tileSize/2, -tileSize/2, tileSize, tileSize);
+        ctx.restore();
+    });
+}
+
+function drawBullets() {
+    gameState.bullets.forEach(bullet => {
+        ctx.save();
+        ctx.translate(bullet.x - camera.x, bullet.y - camera.y);
+        ctx.fillStyle = 'yellow';
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    });
+}
+
+// Initialize game
 document.addEventListener('DOMContentLoaded', () => {
     canvas = document.getElementById('gameCanvas');
     if (!canvas) {
@@ -216,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('player_kill', (data) => {
         player.kills++;
-        player.score += 100; // Award points for a kill
+        player.score += 100;
         updateUI();
     });
 
@@ -227,13 +262,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (delta >= UPDATE_INTERVAL) {
             lastUpdate = timestamp;
+            // Update game state here
         }
 
         if (timestamp - lastNetworkUpdate >= NETWORK_UPDATE_INTERVAL) {
             lastNetworkUpdate = timestamp;
+            // Send updates to server here
         }
 
+        // Clear and render
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawBackground();
+        drawPlayers();
+        drawBullets();
+
         requestAnimationFrame(gameLoop);
     }
 

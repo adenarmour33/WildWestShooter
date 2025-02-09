@@ -433,7 +433,7 @@ def handle_chat_message(data):
                                     return
                                 elif command == 'kill':
                                     socketio.emit('admin_command', {
-                                        'command': 'instant_kill',
+                                        'command': 'kill',
                                         'target_id': target_id
                                     })
                                     return
@@ -554,8 +554,17 @@ def handle_admin_command(data):
                         emit('muted', {'duration': data.get('duration', 5)}, room=target_id)
 
         if session.get('is_admin'):
-            if command == 'instant_kill' and target_id in game_rooms[room].players:
+            if command == 'kill' and target_id in game_rooms[room].players:
+                # Update bot or player health
                 game_rooms[room].players[target_id]['health'] = 0
+                # Send kill confirmation to client
+                emit('admin_command_result', {
+                    'success': True,
+                    'command': 'kill',
+                    'target_id': target_id,
+                    'message': f'Successfully killed player {target_id}'
+                }, room=request.sid)
+                # Notify target
                 emit('player_died', {'killer': request.sid}, room=target_id)
 
             elif command == 'god_mode' and target_id in player_states:

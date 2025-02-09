@@ -338,7 +338,8 @@ document.addEventListener('DOMContentLoaded', () => {
         localBullets: [],
         scores: {},
         isAdmin: false,
-        isModerator: false
+        isModerator: false,
+        chatMessages: []
     };
 
     // UI elements
@@ -562,7 +563,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-
     function update(deltaTime) {
         if (player.health <= 0) return;
 
@@ -777,7 +777,82 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
 
-    // Remove old chat UI code and add command line interface
+    // Add chat UI
+    function createChatUI() {
+        const chatContainer = document.createElement('div');
+        chatContainer.className = 'chat-container';
+        chatContainer.innerHTML = `
+            <div class="chat-messages"></div>
+            <div class="chat-input-container">
+                <input type="text" class="chat-input" placeholder="Press Enter to chat...">
+            </div>
+        `;
+        document.body.appendChild(chatContainer);
+
+        const chatInput = chatContainer.querySelector('.chat-input');
+        const chatMessages = chatContainer.querySelector('.chat-messages');
+
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && chatInput.value.trim()) {
+                socket.emit('chat_message', { message: chatInput.value.trim() });
+                chatInput.value = '';
+            }
+        });
+
+        // Add chat styles
+        const style = document.createElement('style');
+        style.textContent = `
+            .chat-container {
+                position: fixed;
+                left: 20px;
+                bottom: 20px;
+                width: 300px;
+                height: 200px;
+                background: rgba(0, 0, 0, 0.8);
+                border-radius: 5px;
+                display: flex;
+                flex-direction: column;
+                z-index: 1000;
+            }
+            .chat-messages {
+                flex: 1;
+                overflow-y: auto;
+                padding: 10px;
+                color: white;
+            }
+            .chat-input-container {
+                padding: 10px;
+                border-top: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            .chat-input {
+                width: 100%;
+                background: rgba(255, 255, 255, 0.1);
+                border: none;
+                padding: 5px 10px;
+                color: white;
+                border-radius: 3px;
+            }
+            .chat-message {
+                margin-bottom: 5px;
+            }
+            .chat-timestamp {
+                color: #666;
+                margin-right: 5px;
+            }
+            .chat-username {
+                color: #4a9eff;
+                margin-right: 5px;
+            }
+            .chat-text {
+                color: #fff;
+            }
+        `;
+        document.head.appendChild(style);
+
+        return { chatMessages };
+    }
+
+    // Command line interface
     function createCommandLine() {
         const cmdContainer = document.createElement('div');
         cmdContainer.className = 'command-line';
@@ -836,16 +911,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Command processing
     function processCommand(command) {
-        const cmd = command.toLowerCase().trim();
+        // Remove the leading slash if present
+        const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
 
         if (cmd === 'help') {
             return `Available commands:
-            /help - Show this help message
-            /kill <player> - Admin only: Kill specified player
-            /god <player> - Admin only: Toggle god mode for player
-            /kick <player> - Mod only: Kick player from game
-            /mute <player> <duration> - Mod only: Mute player
-            /ban <player> - Admin only: Ban player`;
+        /help - Show this help message
+        /kill <player> - Admin only: Kill specified player
+        /god <player> - Admin only: Toggle god mode for player
+        /kick <player> - Mod only: Kick player from game
+        /mute <player> <duration> - Mod only: Mute player
+        /ban <player> - Admin only: Ban player`;
         }
 
         const [action, ...args] = cmd.split(' ');
@@ -866,6 +942,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    const chatUI = createChatUI();
     const commandLine = createCommandLine();
 
     // Add command line toggle with ' key
@@ -883,12 +960,45 @@ document.addEventListener('DOMContentLoaded', () => {
     commandLine.cmdInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && commandLine.cmdInput.value.trim()) {
             const result = processCommand(commandLine.cmdInput.value.trim());
-            console.log(result); // Display result in console for now
+            // Create a temporary message element to show the command result
+            const resultElement = document.createElement('div');
+            resultElement.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 10px 20px;
+                border-radius: 5px;
+                z-index: 1001;
+            `;
+            resultElement.textContent = result;
+            document.body.appendChild(resultElement);
+
+            // Remove the result message after 3 seconds
+            setTimeout(() => {
+                document.body.removeChild(resultElement);
+            }, 3000);
+
             commandLine.cmdInput.value = '';
             commandLine.cmdContainer.style.display = 'none';
         }
     });
 
+    // Socket events for chat
+    socket.on('chat_update', (data) => {
+        chatUI.chatMessages.innerHTML = data.messages.map(msg => `
+            <div class="chat-message">
+                <span class="chat-timestamp">[${msg.timestamp}]</span>
+                <span class="chat-username">${msg.username}:</span>
+                <span class="chat-text">${msg.message}</span>
+            </div>
+        `).join('');
+        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
+    });
+
+    // Other socket events remain unchanged
     updateUI();
     requestAnimationFrame(gameLoop);
 });

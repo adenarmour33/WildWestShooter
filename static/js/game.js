@@ -1,3 +1,34 @@
+let canvas, ctx, socket;
+let tileSize = 32;
+let lastUpdate = 0;
+const UPDATE_INTERVAL = 1000 / 60; // 60fps target
+const NETWORK_UPDATE_INTERVAL = 50; // Send updates every 50ms
+let lastNetworkUpdate = 0;
+let assets = {
+    tiles: {
+        grass: new Image(),
+        sand: new Image(),
+        tree: new Image()
+    },
+    player: new Image(),
+    weapons: {
+        pistol: new Image(),
+        shotgun: new Image(),
+        smg: new Image(),
+        knife: new Image()
+    }
+};
+
+// Load assets with SVG paths
+assets.tiles.grass.src = '/static/assets/tiles/grass.svg';
+assets.tiles.sand.src = '/static/assets/tiles/sand.svg';
+assets.tiles.tree.src = '/static/assets/tiles/tree.svg';
+assets.player.src = '/static/assets/player.svg';
+assets.weapons.pistol.src = '/static/assets/weapons/pistol.svg';
+assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.svg';
+assets.weapons.smg.src = '/static/assets/weapons/smg.svg';
+assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
+
 let gameState = {
     players: {},
     bullets: [],
@@ -7,6 +38,7 @@ let gameState = {
     chatMessages: []
 };
 
+// Admin panel functionality
 function toggleAdminPanel() {
     const adminPanel = document.querySelector('.admin-panel');
     if (adminPanel) {
@@ -14,7 +46,6 @@ function toggleAdminPanel() {
     }
 }
 
-// Admin UI and commands
 function executeAdminCommand(command) {
     const playerList = document.getElementById('playerList');
     const selectedTarget = playerList ? playerList.value : null;
@@ -43,7 +74,6 @@ function executeAdminCommand(command) {
     socket.emit('admin_command', data);
 }
 
-// Create admin panel UI
 function createAdminPanel() {
     const adminPanel = document.querySelector('.admin-panel');
     if (!adminPanel || (!gameState.isAdmin && !gameState.isModerator)) return;
@@ -117,130 +147,154 @@ function createAdminPanel() {
     adminPanel.insertBefore(playerList, adminPanel.firstChild);
 }
 
-// Socket event handlers for admin panel
-socket.on('moderator_status', (data) => {
-    gameState.isModerator = data.is_moderator;
-    if (data.is_moderator) {
-        createAdminPanel();
+// Initialize game after DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    canvas = document.getElementById('gameCanvas');
+    if (!canvas) {
+        console.error('Canvas element not found');
+        return;
     }
-});
+    ctx = canvas.getContext('2d');
+    socket = io();
 
-socket.on('god_mode_update', (data) => {
-    alert(data.enabled ? 'God mode enabled' : 'God mode disabled');
-});
-
-socket.on('game_state', (state) => {
-    gameState.players = state.players;
-    gameState.scores = state.scores;
-    gameState.isAdmin = state.is_admin;
-    gameState.isModerator = state.is_moderator;
-
-    // Create admin panel if admin/moderator and panel doesn't exist
-    if ((state.is_admin || state.is_moderator) && !document.querySelector('.admin-panel.active')) {
-        createAdminPanel();
+    // Rest of the game initialization code
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        camera.width = canvas.width;
+        camera.height = canvas.height;
     }
-});
 
-socket.on('banned', (data) => {
-    alert(`You have been banned: ${data.reason}`);
-    window.location.href = '/logout';
-});
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
 
-socket.on('kicked', (data) => {
-    alert(`You have been kicked: ${data.reason}`);
-    window.location.href = '/';
-});
-
-socket.on('muted', (data) => {
-    alert(`You have been muted for ${data.duration} minutes`);
-});
-
-
-// Add chat UI
-function createChatUI() {
-    const chatContainer = document.createElement('div');
-    chatContainer.className = 'chat-container';
-    chatContainer.innerHTML = `
-        <div class="chat-messages"></div>
-        <div class="chat-input-container">
-            <input type="text" class="chat-input" placeholder="Press Enter to chat...">
-        </div>
-    `;
-    document.body.appendChild(chatContainer);
-
-    const chatInput = chatContainer.querySelector('.chat-input');
-    const chatMessages = chatContainer.querySelector('.chat-messages');
-
-    chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && chatInput.value.trim()) {
-            socket.emit('chat_message', { message: chatInput.value.trim() });
-            chatInput.value = '';
+    // Socket event handlers
+    socket.on('moderator_status', (data) => {
+        gameState.isModerator = data.is_moderator;
+        if (data.is_moderator) {
+            createAdminPanel();
         }
     });
 
-    return { chatMessages };
-}
+    socket.on('god_mode_update', (data) => {
+        alert(data.enabled ? 'God mode enabled' : 'God mode disabled');
+    });
 
-const chatUI = createChatUI();
+    socket.on('game_state', (state) => {
+        gameState.players = state.players;
+        gameState.scores = state.scores;
+        gameState.isAdmin = state.is_admin;
+        gameState.isModerator = state.is_moderator;
 
-socket.on('chat_update', (data) => {
-    chatUI.chatMessages.innerHTML = data.messages.map(msg => `
-        <div class="chat-message">
-            <span class="chat-timestamp">[${msg.timestamp}]</span>
-            <span class="chat-username">${msg.username}:</span>
-            <span class="chat-text">${msg.message}</span>
-        </div>
-    `).join('');
-    chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
-});
+        // Create admin panel if admin/moderator and panel doesn't exist
+        if ((state.is_admin || state.is_moderator) && !document.querySelector('.admin-panel.active')) {
+            createAdminPanel();
+        }
 
-socket.on('player_hit', (data) => {
-    player.health -= data.damage;
-    updateUI();
-    if (player.health <= 0) {
-        player.deaths++;
-        socket.emit('player_died', { shooter: data.shooter });
+        // Update UI to reflect new game state
+        updateUI();
+    });
+
+    socket.on('banned', (data) => {
+        alert(`You have been banned: ${data.reason}`);
+        window.location.href = '/logout';
+    });
+
+    socket.on('kicked', (data) => {
+        alert(`You have been kicked: ${data.reason}`);
+        window.location.href = '/';
+    });
+
+    socket.on('muted', (data) => {
+        alert(`You have been muted for ${data.duration} minutes`);
+    });
+
+    // Game loop and other event handlers remain unchanged
+
+    // Add chat UI
+    function createChatUI() {
+        const chatContainer = document.createElement('div');
+        chatContainer.className = 'chat-container';
+        chatContainer.innerHTML = `
+            <div class="chat-messages"></div>
+            <div class="chat-input-container">
+                <input type="text" class="chat-input" placeholder="Press Enter to chat...">
+            </div>
+        `;
+        document.body.appendChild(chatContainer);
+
+        const chatInput = chatContainer.querySelector('.chat-input');
+        const chatMessages = chatContainer.querySelector('.chat-messages');
+
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && chatInput.value.trim()) {
+                socket.emit('chat_message', { message: chatInput.value.trim() });
+                chatInput.value = '';
+            }
+        });
+
+        return { chatMessages };
     }
-});
 
-socket.on('player_respawn', (data) => {
-    player.x = data.x;
-    player.y = data.y;
-    player.health = 100;
-    player.velX = 0;
-    player.velY = 0;
+    const chatUI = createChatUI();
+
+    socket.on('chat_update', (data) => {
+        chatUI.chatMessages.innerHTML = data.messages.map(msg => `
+            <div class="chat-message">
+                <span class="chat-timestamp">[${msg.timestamp}]</span>
+                <span class="chat-username">${msg.username}:</span>
+                <span class="chat-text">${msg.message}</span>
+            </div>
+        `).join('');
+        chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
+    });
+
+
+    socket.on('game_state', (state) => {
+        gameState.players = state.players;
+        gameState.bullets = state.bullets.map(b => new Bullet(
+            b.x, b.y, b.angle, BULLET_SPEED, b.damage, b.weapon, b.shooter
+        ));
+        gameState.scores = state.scores;
+        gameState.isAdmin = state.is_admin;
+        gameState.isModerator = state.is_moderator;
+
+        // Create admin panel if admin and panel doesn't exist
+        if ((state.is_admin || state.is_moderator) && !document.querySelector('.admin-panel.active')) {
+            createAdminPanel();
+        }
+
+        // Update UI to reflect new game state
+        updateUI();
+    });
+
+    socket.on('player_hit', (data) => {
+        player.health -= data.damage;
+        updateUI();
+        if (player.health <= 0) {
+            player.deaths++;
+            socket.emit('player_died', { shooter: data.shooter });
+        }
+    });
+
+    socket.on('player_respawn', (data) => {
+        player.x = data.x;
+        player.y = data.y;
+        player.health = 100;
+        player.velX = 0;
+        player.velY = 0;
+        updateUI();
+    });
+
+    socket.on('player_kill', (data) => {
+        player.kills++;
+        player.score += 100; // Award points for a kill
+        updateUI(); // Update UI to show new score
+    });
+
+
     updateUI();
-});
-
-socket.on('player_kill', (data) => {
-    player.kills++;
-    player.score += 100; // Award points for a kill
-    updateUI(); // Update UI to show new score
-});
-
-
-//Existing code from original file.  No changes needed.
-socket.on('game_state', (state) => {
-    gameState.players = state.players;
-    gameState.bullets = state.bullets.map(b => new Bullet(
-        b.x, b.y, b.angle, BULLET_SPEED, b.damage, b.weapon, b.shooter
-    ));
-    gameState.scores = state.scores;
-    gameState.isAdmin = state.is_admin;
-    gameState.isModerator = state.is_moderator;
-
-    // Create admin panel if admin and panel doesn't exist
-    if ((state.is_admin || state.is_moderator) && !document.querySelector('.admin-panel.active')) {
-        createAdminPanel();
-    }
-
-    // Update UI to reflect new game state
-    updateUI();
-});
-
-
-updateUI();
-requestAnimationFrame(gameLoop);
+    requestAnimationFrame(gameLoop);
 });
 
 let joystick = {

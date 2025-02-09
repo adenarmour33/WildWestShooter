@@ -320,6 +320,7 @@
     padding: 15px;
     transition: right 0.3s ease;
     z-index: 1000;
+    pointer-events: auto;
 }
 
 .admin-panel.active {
@@ -341,6 +342,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    pointer-events: auto;
 }
 
 .admin-panel select {

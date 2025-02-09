@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="text-center">
+    <h1 class="mb-4">Wild West Shooter</h1>
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card bg-dark">
+                <div class="card-body">
+                    <h5 class="card-title">Main Menu</h5>
+                    <a href="{{ url_for('game') }}" class="btn btn-primary btn-lg mb-3 w-100">Play Game</a>
+                    <button class="btn btn-secondary btn-lg mb-3 w-100" data-bs-toggle="modal" data-bs-target="#settingsModal">Settings</button>
+                    <div class="card mt-3">
+                        <div class="card-body">
+                            <h6>Controls:</h6>
+                            <ul class="list-unstyled">
+                                <li>WASD - Move</li>
+                                <li>Space - Jump</li>
+                                <li>Left Click - Shoot</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Settings</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Sound Volume</label>
+                    <input type="range" class="form-range" min="0" max="100" value="50">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Music Volume</label>
+                    <input type="range" class="form-range" min="0" max="100" value="50">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

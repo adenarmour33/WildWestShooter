@@ -132,8 +132,9 @@ class GameRoom:
             bot['y'] = max(0, min(bot['y'], 1000))
             bot['rotation'] = bot['move_direction']
 
-        # Clean up old bullets
-        self.bullets = [b for b in self.bullets if (now - datetime.fromtimestamp(b.get('created_at', now.timestamp()))).total_seconds() < 2]
+        # Clean up old bullets and handle collisions
+        current_time = now.timestamp()
+        self.bullets = [b for b in self.bullets if (current_time - b.get('created_at', current_time)) < 2]
 
 game_rooms = {}
 player_states = {}
@@ -286,37 +287,43 @@ def handle_player_hit(data):
     if request.sid in player_states:
         room = player_states[request.sid]['room']
         if room in game_rooms:
-            target_id = data.get('target_id', request.sid)
-            target = game_rooms[room].players[target_id]
-            damage = data.get('damage', 15)  # Default damage if not specified
-            target['health'] -= damage
+            target_id = data.get('target_id')
+            if target_id and target_id in game_rooms[room].players:
+                target = game_rooms[room].players[target_id]
+                damage = data.get('damage', 15)  # Default damage if not specified
 
-            if target['health'] <= 0:
-                # Handle player/bot death
-                shooter = data.get('shooter')
-                if shooter and shooter in game_rooms[room].players:
-                    # Update killer's score and kills
-                    game_rooms[room].players[shooter]['score'] += 10
-                    game_rooms[room].players[shooter]['kills'] = game_rooms[room].players[shooter].get('kills', 0) + 1
-                    game_rooms[room].scores[shooter] = game_rooms[room].players[shooter]['score']
+                # Apply damage to target
+                target['health'] = max(0, target['health'] - damage)
 
-                    # Notify killer
-                    emit('player_kill', {}, room=shooter)
+                # Notify target of damage
+                emit('player_hit', {'damage': damage}, room=target_id)
 
-                # Respawn player/bot
-                spawn = game_rooms[room].respawn_player(target_id)
-                if spawn and not target.get('is_bot', False):
-                    emit('player_respawn', {
-                        'x': spawn['x'],
-                        'y': spawn['y']
-                    }, room=target_id)
+                if target['health'] <= 0:
+                    # Handle player/bot death
+                    shooter = data.get('shooter')
+                    if shooter and shooter in game_rooms[room].players:
+                        # Update killer's score and kills
+                        game_rooms[room].players[shooter]['score'] += 10
+                        game_rooms[room].players[shooter]['kills'] += 1
+                        game_rooms[room].scores[shooter] = game_rooms[room].players[shooter]['score']
 
-            # Emit updated game state to all players
-            emit('game_state', {
-                'players': game_rooms[room].players,
-                'bullets': game_rooms[room].bullets,
-                'scores': game_rooms[room].scores
-            }, room=room)
+                        # Notify killer
+                        emit('player_kill', {}, room=shooter)
+
+                    # Respawn player/bot
+                    spawn = game_rooms[room].respawn_player(target_id)
+                    if spawn and not target.get('is_bot', False):
+                        emit('player_respawn', {
+                            'x': spawn['x'],
+                            'y': spawn['y']
+                        }, room=target_id)
+
+                # Emit updated game state to all players
+                emit('game_state', {
+                    'players': game_rooms[room].players,
+                    'bullets': game_rooms[room].bullets,
+                    'scores': game_rooms[room].scores
+                }, room=room)
 
 with app.app_context():
     db.create_all()

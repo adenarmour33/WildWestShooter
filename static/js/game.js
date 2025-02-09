@@ -61,7 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.damage = damage;
             this.weapon = weapon;
             this.shooter = shooter;
-            this.lifetime = 2000; // 2 seconds lifetime
+            this.lifetime = 2000;
             this.spawnTime = Date.now();
             this.active = true;
         }
@@ -69,11 +69,19 @@ document.addEventListener('DOMContentLoaded', () => {
         update(deltaTime) {
             if (!this.active) return;
 
-            const movement = this.speed * (deltaTime / 16.67); // Normalize for 60fps
+            // Update position with delta time
+            const movement = this.speed * (deltaTime / 16.67);
             this.x += Math.cos(this.angle) * movement;
             this.y += Math.sin(this.angle) * movement;
 
-            // Deactivate bullet after lifetime expires
+            // Check map bounds
+            const mapWidth = 50 * tileSize;
+            const mapHeight = 50 * tileSize;
+            if (this.x < 0 || this.x > mapWidth || this.y < 0 || this.y > mapHeight) {
+                this.active = false;
+            }
+
+            // Check lifetime
             if (Date.now() - this.spawnTime > this.lifetime) {
                 this.active = false;
             }
@@ -294,11 +302,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function checkBulletCollisions() {
-        const PLAYER_HITBOX = 16; // Half of player size for hitbox calculation
+        const PLAYER_HITBOX = 32; // Increased hitbox size for better hit detection
 
+        // Update and filter bullets
         gameState.bullets = gameState.bullets.filter(bullet => {
-            const lifetime = 2000; // Match server-side lifetime
-            if (Date.now() - bullet.spawnTime > lifetime) {
+            // Check for bullet lifetime first
+            if (Date.now() - bullet.spawnTime > 2000) {
                 return false;
             }
 
@@ -314,7 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         shooter: bullet.shooter,
                         target_id: socket.id
                     });
-                    return false;
+                    return false; // Remove bullet after hit
                 }
             }
 
@@ -332,16 +341,29 @@ document.addEventListener('DOMContentLoaded', () => {
                         shooter: bullet.shooter,
                         target_id: id
                     });
-                    return false;
+                    return false; // Remove bullet after hit
                 }
             }
 
-            return true;
+            // Update bullet position if no collision occurred
+            const speed = bullet.speed || BULLET_SPEED;
+            bullet.x += Math.cos(bullet.angle) * speed;
+            bullet.y += Math.sin(bullet.angle) * speed;
+
+            // Keep bullet in game bounds
+            const mapWidth = 50 * tileSize;
+            const mapHeight = 50 * tileSize;
+            if (bullet.x < 0 || bullet.x > mapWidth || bullet.y < 0 || bullet.y > mapHeight) {
+                return false;
+            }
+
+            return true; // Keep bullet if no collision
         });
 
-        // Update local bullets
+        // Clean up local bullets
         gameState.localBullets = gameState.localBullets.filter(bullet => {
-            bullet.update(16.67); // Assume 60fps for local bullets
+            if (!bullet.active) return false;
+            bullet.update(16.67);
             return bullet.active;
         });
     }

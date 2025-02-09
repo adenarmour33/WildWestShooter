@@ -204,15 +204,21 @@ def login():
                 flash('Your account has been banned: ' + (user.ban_reason or 'No reason provided'))
                 return redirect(url_for('login'))
 
+            # Clear guest flag if exists
+            session.pop('is_guest', None)
+
             # Special case for admin - check BEFORE setting session
             if email == 'adeniscool23@outlook.com':
                 user.is_admin = True
                 db.session.commit()
+                logging.debug(f"Admin login detected for user {username}")
 
             session['user_id'] = user.id
             session['username'] = user.username
             session['is_admin'] = user.is_admin
-            session['email'] = email  # Store email in session
+            session['email'] = email
+
+            logging.debug(f"Login successful for {username}, admin status: {user.is_admin}")
 
             if user.is_admin:
                 flash('Welcome Administrator! You have full access to all game controls.')
@@ -226,9 +232,15 @@ def guest_login():
     guest_id = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
     guest_username = f"Guest_{guest_id}"
 
+    # Clear any existing session
+    session.clear()
+
     session['user_id'] = f"guest_{guest_id}"
     session['username'] = guest_username
     session['is_guest'] = True
+    session['is_admin'] = False  # Explicitly set guest as non-admin
+
+    logging.debug(f"Guest login created: {guest_username}")
 
     return redirect(url_for('index'))
 
@@ -283,13 +295,16 @@ def handle_connect():
 
     spawn = game_rooms[room].add_player(request.sid, session['username'])
 
+    is_admin = session.get('is_admin', False) and not session.get('is_guest', False)
+    logging.debug(f"Socket connection for {session['username']}, admin status: {is_admin}, guest status: {session.get('is_guest', False)}")
+
     player_states[request.sid] = {
         'user_id': session['user_id'],
         'username': session['username'],
         'room': room,
         'spawn': spawn,
         'is_guest': session.get('is_guest', False),
-        'is_admin': session.get('is_admin', False)
+        'is_admin': is_admin
     }
 
     # Show help message with available commands
@@ -301,7 +316,7 @@ def handle_connect():
         'bullets': game_rooms[room].bullets,
         'scores': game_rooms[room].scores,
         'chat_messages': game_rooms[room].chat_messages,
-        'is_admin': session.get('is_admin', False)
+        'is_admin': is_admin
     }, room=request.sid)
 
 @socketio.on('disconnect')

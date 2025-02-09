@@ -622,8 +622,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedTarget = null;
 
     function createAdminPanel() {
-        const adminPanel = document.querySelector('.admin-panel');
-        if (!adminPanel || (!gameState.isAdmin && !gameState.isModerator)) return;
+        const adminPanel = document.createElement('div');
+        adminPanel.className = 'admin-panel';
 
         // Update player list periodically
         setInterval(() => {
@@ -822,9 +822,12 @@ document.addEventListener('DOMContentLoaded', () => {
         gameState.isAdmin = state.is_admin;
         gameState.isModerator = state.is_moderator;
 
-        // Create admin panel if admin and panel doesn't exist
-        if ((state.is_admin || state.is_moderator) && !adminPanel) {
+        // Only create admin panel if user is an admin and panel doesn't exist
+        const existingPanel = document.querySelector('.admin-panel');
+        if (state.is_admin && !existingPanel) {
             createAdminPanel();
+        } else if (!state.is_admin && existingPanel) {
+            existingPanel.remove();
         }
 
         updateUI();

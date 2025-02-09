@@ -311,10 +311,10 @@
 /* Admin Panel Styles */
 .admin-panel {
     position: fixed;
-    right: -200px;
+    right: -250px;
     top: 50%;
     transform: translateY(-50%);
-    width: 200px;
+    width: 250px;
     background: rgba(0, 0, 0, 0.8);
     border-radius: 10px 0 0 10px;
     padding: 15px;
@@ -357,21 +357,7 @@
     width: 100%;
     margin-bottom: 5px;
     padding: 5px 10px;
-}
-
-.admin-panel .btn-danger {
-    background-color: #e74c3c;
-    border-color: #c0392b;
-}
-
-.admin-panel .btn-warning {
-    background-color: #f1c40f;
-    border-color: #f39c12;
-}
-
-.admin-panel .btn-info {
-    background-color: #3498db;
-    border-color: #2980b9;
+    text-align: center;
 }
 
 .admin-panel option {

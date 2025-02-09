@@ -436,8 +436,18 @@ def handle_chat_message(data):
                                 except ValueError:
                                     pass
 
-            # If not a command or command failed, process as regular chat message
-            if (not isinstance(user_id, str) or not user_id.startswith('guest_')):
+            # Process regular chat message for both registered users and guests
+            if user_id.startswith('guest_'):
+                # Handle guest messages
+                game_rooms[room].add_chat_message(
+                    player_states[request.sid]['username'],
+                    message
+                )
+                emit('chat_update', {
+                    'messages': game_rooms[room].chat_messages
+                }, room=room)
+            else:
+                # Handle registered user messages
                 user = User.query.get(player_states[request.sid]['user_id'])
                 if user and not user.is_muted:
                     is_admin = session.get('is_admin', False)

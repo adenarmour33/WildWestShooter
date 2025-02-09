@@ -1,15 +1,17 @@
+/* Game Container */
 .game-container {
     position: relative;
-    width: 100%;
+    width: 100vw;
     height: 100vh;
     overflow: hidden;
     touch-action: none;
+    background: #2c2c2c;
 }
 
 #gameCanvas {
-    background-color: #2c2c2c;
     width: 100%;
     height: 100%;
+    display: block;
 }
 
 .game-ui {
@@ -21,30 +23,23 @@
     pointer-events: none;
 }
 
-/* Top UI */
-.top-ui {
+/* Health Bar */
+.health-bar-container {
     position: absolute;
-    top: 20px;
-    left: 20px;
-    right: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-}
-
-.health-container {
-    background: rgba(0, 0, 0, 0.5);
-    padding: 10px;
-    border-radius: 5px;
+    top: 10px;
+    left: 10px;
     display: flex;
     align-items: center;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 5px 10px;
+    border-radius: 20px;
 }
 
 .health-bar {
-    width: 200px;
-    height: 20px;
+    width: 150px;
+    height: 12px;
     background: rgba(255, 255, 255, 0.2);
-    border-radius: 10px;
+    border-radius: 6px;
     overflow: hidden;
 }
 
@@ -57,19 +52,118 @@
 
 .health-text {
     color: white;
-    margin-left: 10px;
+    margin-left: 8px;
+    font-size: 12px;
     font-weight: bold;
 }
 
-.minimap {
-    width: 150px;
-    height: 150px;
+/* Joystick */
+.joystick-container {
+    position: absolute;
+    bottom: 80px;
+    left: 40px;
+    pointer-events: auto;
+}
+
+.joystick-base {
+    width: 120px;
+    height: 120px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    position: relative;
+}
+
+.joystick-stick {
+    width: 50px;
+    height: 50px;
+    background: rgba(255, 255, 255, 0.25);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition: transform 0.1s ease;
+}
+
+/* Action Buttons */
+.action-buttons {
+    position: absolute;
+    bottom: 80px;
+    right: 40px;
+    display: flex;
+    gap: 15px;
+    pointer-events: auto;
+}
+
+.action-button {
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.action-icon {
+    font-size: 24px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+/* Weapon Slots */
+.weapon-slots {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+}
+
+.weapon-slot {
+    width: 40px;
+    height: 40px;
     background: rgba(0, 0, 0, 0.5);
-    border-radius: 5px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.weapon-slot.active {
+    border-color: #f1c40f;
+    background: rgba(241, 196, 15, 0.2);
+}
+
+.ammo-counter {
+    position: absolute;
+    bottom: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    font-size: 14px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Minimap */
+#minimap {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
 }
 
 /* Mobile Controls */
-.mobile-controls {
+.controls-container {
     position: absolute;
     bottom: 100px;
     left: 0;
@@ -77,94 +171,10 @@
     display: flex;
     justify-content: space-between;
     padding: 20px;
-    pointer-events: auto;
+    pointer-events: none;
 }
 
-.joystick-area {
-    width: 150px;
-    height: 150px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 50%;
-    position: relative;
-}
-
-.joystick {
-    width: 70px;
-    height: 70px;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
-
-.joystick-knob {
-    width: 40px;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 50%;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
-
-.action-buttons {
-    display: flex;
-    gap: 20px;
-}
-
-.action-btn {
-    width: 60px;
-    height: 60px;
-    background: rgba(255, 255, 255, 0.2);
-    border: none;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: auto;
-}
-
-.action-icon {
-    font-size: 24px;
-}
-
-/* Bottom UI */
-.bottom-ui {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-}
-
-.weapon-slots {
-    display: flex;
-    gap: 10px;
-}
-
-.weapon-slot {
-    width: 60px;
-    height: 60px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-radius: 5px;
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-}
-
-.weapon-slot.active {
-    border-color: #f1c40f;
-}
-
+/*Rest of the styles remain*/
 .ammo-counter {
     color: white;
     font-size: 18px;

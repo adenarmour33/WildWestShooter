@@ -392,6 +392,8 @@ document.addEventListener('DOMContentLoaded', () => {
         score: 0,
         kills: 0,
         deaths: 0,
+        killStreak: 0,
+        maxKillStreak: 0,
         currentWeapon: 'pistol',
         lastShot: 0,
         speedMultiplier: 1,
@@ -877,7 +879,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 border: none;
                 padding: 8px;
                 color: white;
-                border-radius: 4px;
+                borderradius: 4px;
             }
             .chat-send-button {
                 background: #4a9eff;
@@ -1452,6 +1454,22 @@ document.addEventListener('DOMContentLoaded', () => {
     function activatePowerup(type) {
         const powerup = POWERUPS[type];
         const now = Date.now();
+
+        // Create visual effect
+        const effect = document.createElement('div');
+        effect.className = 'powerup-effect';
+        effect.style.cssText = `
+        position: absolute;
+        left: ${player.x - camera.x}px;
+        top: ${player.y - camera.y}px;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        animation: pulse 0.5s ease-out;
+        background: ${type === 'speed' ? '#4287f5' : type === 'shield' ? '#42f5a1' : '#f54242'};
+    `;
+        document.body.appendChild(effect);
+        setTimeout(() => effect.remove(), 500);
 
         // Deactivate existing powerup of same type if active
         if (gameState.activePowerups[type]) {

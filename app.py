@@ -71,11 +71,25 @@ class GameRoom:
         self.scores[player_id] = 0
         return spawn
 
-    def add_bot(self):
+    def add_bot(self, difficulty='normal'):
         bot_count = len([p for p in self.players.values() if p.get('is_bot', False)])
         bot_id = f"bot_{bot_count}"
         bot_name = self.bot_names[bot_count % len(self.bot_names)]
         spawn = self.get_random_spawn()
+        
+        # Adjust bot stats based on difficulty
+        speed = 3
+        accuracy = 0.1
+        reaction_time = 1000
+        
+        if difficulty == 'hard':
+            speed = 4
+            accuracy = 0.05
+            reaction_time = 500
+        elif difficulty == 'easy':
+            speed = 2
+            accuracy = 0.2
+            reaction_time = 1500
 
         self.players[bot_id] = {
             'username': bot_name,

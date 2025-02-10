@@ -149,38 +149,104 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupAdminPanel() {
         console.log('Setting up admin panel');
 
-        // Create admin panel if it doesn't exist
+        // Create or get admin panel
         let adminPanel = document.querySelector('.admin-panel');
         if (!adminPanel) {
             adminPanel = document.createElement('div');
             adminPanel.className = 'admin-panel';
             adminPanel.style.display = 'none';
             adminPanel.innerHTML = `
-                <h2>Admin Panel</h2>
+                <div class="admin-header">
+                    <h2>Admin Panel</h2>
+                    <button class="admin-panel-close">&times;</button>
+                </div>
                 <div class="admin-section">
                     <h3>Player Management</h3>
                     <select id="playerList">
                         <option value="">Select Player</option>
                     </select>
-                    <button id="killButton">Kill Player</button>
-                    <button id="godModeButton">Toggle God Mode</button>
-                    <button id="modButton">Toggle Moderator</button>
-                    <button id="kickButton">Kick Player</button>
-                    <button id="muteButton">Mute Player</button>
+                    <div class="admin-buttons">
+                        <button id="killButton">Kill Player</button>
+                        <button id="godModeButton">Toggle God Mode</button>
+                        <button id="modButton">Toggle Moderator</button>
+                        <button id="kickButton">Kick Player</button>
+                        <button id="muteButton">Mute Player</button>
+                    </div>
                 </div>
             `;
             document.body.appendChild(adminPanel);
+
+            // Add styles
+            const style = document.createElement('style');
+            style.textContent = `
+                .admin-panel {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: rgba(0, 0, 0, 0.9);
+                    padding: 20px;
+                    border-radius: 10px;
+                    z-index: 1001;
+                    color: white;
+                    min-width: 300px;
+                }
+                .admin-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 20px;
+                }
+                .admin-panel h2 {
+                    margin: 0;
+                    color: #4a9eff;
+                }
+                .admin-panel-close {
+                    background: none;
+                    border: none;
+                    color: white;
+                    font-size: 24px;
+                    cursor: pointer;
+                    padding: 0;
+                }
+                .admin-section {
+                    margin-bottom: 15px;
+                }
+                .admin-section h3 {
+                    margin: 10px 0;
+                    color: #bbb;
+                }
+                .admin-panel select {
+                    width: 100%;
+                    margin-bottom: 10px;
+                    padding: 8px;
+                    background: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    color: white;
+                    border-radius: 4px;
+                }
+                .admin-buttons {
+                    display: grid;
+                    gap: 8px;
+                }
+                .admin-panel button {
+                    width: 100%;
+                    padding: 8px;
+                    background: #4a9eff;
+                    border: none;
+                    color: white;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    transition: background 0.3s;
+                }
+                .admin-panel button:hover {
+                    background: #357abd;
+                }
+            `;
+            document.head.appendChild(style);
         }
 
-        // Remove existing event listeners
-        const oldPanel = document.querySelector('.admin-panel');
-        if (oldPanel) {
-            const clone = oldPanel.cloneNode(true);
-            oldPanel.parentNode.replaceChild(clone, oldPanel);
-            adminPanel = clone;
-        }
-
-        // Setup panel toggle
+        // Setup toggle
         document.addEventListener('keydown', (e) => {
             if (e.key === "'") {
                 e.preventDefault();
@@ -191,20 +257,34 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Setup button handlers
+        // Close button
+        const closeButton = adminPanel.querySelector('.admin-panel-close');
+        if (closeButton) {
+            closeButton.addEventListener('click', () => {
+                adminPanel.style.display = 'none';
+            });
+        }
+
+        // Button handlers
         const setupButton = (id, command, promptText = null, extraData = null) => {
             const button = adminPanel.querySelector(`#${id}`);
             if (button) {
-                button.addEventListener('click', () => {
+                // Remove existing listeners
+                const newButton = button.cloneNode(true);
+                button.parentNode.replaceChild(newButton, button);
+
+                newButton.addEventListener('click', () => {
                     const playerSelect = adminPanel.querySelector('#playerList');
-                    if (!playerSelect || !playerSelect.value) {
+                    const selectedPlayer = playerSelect?.value;
+
+                    if (!selectedPlayer) {
                         alert('Please select a player first');
                         return;
                     }
 
-                    let data = {
+                    const data = {
                         command: command,
-                        target_id: playerSelect.value
+                        target_id: selectedPlayer
                     };
 
                     if (promptText) {
@@ -215,13 +295,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
 
-                    console.log(`Sending admin command: ${command}`, data);
+                    console.log('Sending admin command:', command, data);
                     socket.emit('admin_command', data);
                 });
             }
         };
 
-        // Setup each button with proper handlers
+        // Setup buttons
         setupButton('killButton', 'kill');
         setupButton('godModeButton', 'god_mode');
         setupButton('modButton', 'mod');
@@ -238,24 +318,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert(data.error || 'Command failed');
             }
         });
-
-        // Initial player list update
-        updatePlayerList();
     }
 
     function updatePlayerList() {
-        const playerSelect = document.getElementById('playerList');
+        const playerSelect = document.querySelector('#playerList');
         if (!playerSelect) return;
 
-        // Store current selection
         const currentSelection = playerSelect.value;
-
-        // Clear and rebuild list
         playerSelect.innerHTML = '<option value="">Select Player</option>';
 
-        // Add all players except current user
         Object.entries(gameState.players).forEach(([id, player]) => {
-            if (id !== socket.id) {  // Exclude current player
+            if (id !== socket.id) {
                 const option = document.createElement('option');
                 option.value = id;
                 option.textContent = `${player.username}${id.startsWith('bot_') ? ' (Bot)' : ''}`;
@@ -263,7 +336,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        // Restore previous selection if player still exists
         if (currentSelection && gameState.players[currentSelection]) {
             playerSelect.value = currentSelection;
         }
@@ -839,39 +911,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 cursor: pointer;
                 font-size: 20px;
             }
-            .admin-panel select, .admin-panel button {
-                width: 100%;
-                margin: 5px 0;
-                padding: 8px;
-                background: rgba(255, 255, 255, 0.1);
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                color: white;
-                border-radius: 4px;
-            }
-            .admin-panel button {
-                background: #4a9eff;
-                border: none;
-                cursor: pointer;
-                transition: background 0.3s;
-            }
-            .admin-panel button:hover {
-                background: #357abd;
-            }
-            .admin-section {
-                margin-bottom: 15px;
-            }
-            .admin-section h3 {
-                margin: 10px 0;
-                color: #bbb;
-            }
-        `;
+            .admin-panel select, .adminpanel button {
+                    width: 100%;
+                    margin: 5px 0;
+                    padding: 8px;
+                    background: rgba(255, 255, 255, 0.1);
+                    border: 1px solid rgba(255, 255, 255, 0.2);
+                    color: white;
+                    border-radius: 4px;
+                }
+                .admin-panel button {
+                    background: #4a9eff;
+                    border: none;
+                    cursor: pointer;
+                    transition: background 0.3s;
+                }
+                .admin-panel button:hover {
+                    background: #357abd;
+                }
+                .admin-section {
+                    margin-bottom: 15px;
+                }
+                .admin-section h3 {
+                    margin: 10px 0;
+                    color: #bbb;
+                }
+            `;
         document.head.appendChild(style);
 
         // Set up command input handling
         cmdInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && cmdInput.value.trim().toLowerCase() === '/panel') {
                 if (gameState.isAdmin) {
-                    createAdminPanel();
+                    toggleAdminPanel();
                 } else {
                     const resultElement = document.createElement('div');
                     resultElement.style.cssText = `
@@ -884,7 +956,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         padding: 10px 20px;
                         border-radius: 5px;
                         z-index: 1001;
-                    `;                    resultElement.textContent = 'Access denied: Admin privileges required';                    document.body.appendChild(resultElement);
+                    `;
+                    resultElement.textContent = 'Access denied: Admin privileges required';
+                    document.body.appendChild(resultElement);
                     setTimeout(() => document.body.removeChild(resultElement), 3000);
                 }
                 cmdInput.value = '';

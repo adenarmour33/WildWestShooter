@@ -57,6 +57,80 @@ const WEAPONS = {
     knife: { damage: 35, fireRate: 500, range: 50 }
 };
 
+// Define admin functions first at the global scope
+window.adminKillPlayer = function() {
+    const playerSelect = document.querySelector('#playerList');
+    if (!playerSelect || !playerSelect.value) {
+        alert('Please select a player');
+        return;
+    }
+    console.log('Executing kill command for player:', playerSelect.value);
+    socket.emit('admin_command', {
+        command: 'kill',
+        target_id: playerSelect.value
+    });
+};
+
+window.adminKickPlayer = function() {
+    const playerSelect = document.querySelector('#playerList');
+    if (!playerSelect || !playerSelect.value) {
+        alert('Please select a player');
+        return;
+    }
+    const reason = prompt('Enter kick reason:');
+    if (reason) {
+        console.log('Executing kick command for player:', playerSelect.value);
+        socket.emit('admin_command', {
+            command: 'kick',
+            target_id: playerSelect.value,
+            reason: reason
+        });
+    }
+};
+
+window.adminToggleGodMode = function() {
+    const playerSelect = document.querySelector('#playerList');
+    if (!playerSelect || !playerSelect.value) {
+        alert('Please select a player');
+        return;
+    }
+    console.log('Executing god mode toggle for player:', playerSelect.value);
+    socket.emit('admin_command', {
+        command: 'god_mode',
+        target_id: playerSelect.value
+    });
+};
+
+window.adminToggleModerator = function() {
+    const playerSelect = document.querySelector('#playerList');
+    if (!playerSelect || !playerSelect.value) {
+        alert('Please select a player');
+        return;
+    }
+    console.log('Executing moderator toggle for player:', playerSelect.value);
+    socket.emit('admin_command', {
+        command: 'mod',
+        target_id: playerSelect.value
+    });
+};
+
+window.adminMutePlayer = function() {
+    const playerSelect = document.querySelector('#playerList');
+    if (!playerSelect || !playerSelect.value) {
+        alert('Please select a player');
+        return;
+    }
+    const duration = prompt('Enter mute duration (minutes):', '5');
+    if (duration) {
+        console.log('Executing mute command for player:', playerSelect.value);
+        socket.emit('admin_command', {
+            command: 'mute',
+            target_id: playerSelect.value,
+            duration: parseInt(duration)
+        });
+    }
+};
+
 // Initialize game after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM Content Loaded');
@@ -377,11 +451,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 <h3>Player Management</h3>
                 <select id="playerList">
                     <option value="">Select Player</option>
-                    ${Object.entries(gameState.players)
-                        .filter(([id, player]) => !player.username.startsWith('bot_'))
-                        .map(([id, player]) => 
-                            `<option value="${id}">${player.username}</option>`
-                        ).join('')}
                 </select>
                 <button onclick="adminKillPlayer()">Kill Player</button>
                 <button onclick="adminKickPlayer()">Kick Player</button>
@@ -407,7 +476,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Fix duplicate functions - keeping only one set of admin functions
     function toggleAdminPanel() {
         const adminPanel = document.querySelector('.admin-panel');
         if (adminPanel) {
@@ -418,85 +486,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function adminKillPlayer() {
-        const playerSelect = document.querySelector('#playerList');
-        if (!playerSelect || !playerSelect.value) {
-            alert('Please select a player');
-            return;
-        }
 
-        socket.emit('admin_command', {
-            command: 'kill',
-            target_id: playerSelect.value
+    function updatePlayerList() {
+        const playerSelect = document.getElementById('playerList');
+        if (!playerSelect) return;
+
+        playerSelect.innerHTML = '<option value="">Select Player</option>';
+        Object.entries(gameState.players).forEach(([id, player]) => {
+            if (id !== gameState.userId && !player.username.startsWith('bot_')) {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = player.username;
+                playerSelect.appendChild(option);
+            }
         });
     }
-
-    function adminKickPlayer() {
-        const playerSelect = document.querySelector('#playerList');
-        if (!playerSelect || !playerSelect.value) {
-            alert('Please select a player');
-            return;
-        }
-
-        const reason = prompt('Enter kick reason:');
-        if (reason) {
-            socket.emit('admin_command', {
-                command: 'kick',
-                target_id: playerSelect.value,
-                reason: reason
-            });
-        }
-    }
-
-    function adminToggleGodMode() {
-        const playerSelect = document.querySelector('#playerList');
-        if (!playerSelect || !playerSelect.value) {
-            alert('Please select a player');
-            return;
-        }
-
-        socket.emit('admin_command', {
-            command: 'god_mode',
-            target_id: playerSelect.value
-        });
-    }
-
-    function adminToggleModerator() {
-        const playerSelect = document.querySelector('#playerList');
-        if (!playerSelect || !playerSelect.value) {
-            alert('Please select a player');
-            return;
-        }
-
-        socket.emit('admin_command', {
-            command: 'mod',
-            target_id: playerSelect.value
-        });
-    }
-
-    function adminMutePlayer() {
-        const playerSelect = document.querySelector('#playerList');
-        if (!playerSelect || !playerSelect.value) {
-            alert('Please select a player');
-            return;
-        }
-
-        const duration = prompt('Enter mute duration (minutes):', '5');
-        if (duration) {
-            socket.emit('admin_command', {
-                command: 'mute',
-                target_id: playerSelect.value,
-                duration: parseInt(duration)
-            });
-        }
-    }
-
-    // Make sure these functions are globally accessible
-    window.adminKillPlayer = adminKillPlayer;
-    window.adminKickPlayer = adminKickPlayer;
-    window.adminToggleGodMode = adminToggleGodMode;
-    window.adminToggleModerator = adminToggleModerator;
-    window.adminMutePlayer = adminMutePlayer;
 
     // Map configuration
     const map = {
@@ -569,7 +573,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // Add admin panel toggle
         if(e.key === "'") {
-            toggleAdminPanel();
+            e.preventDefault(); // Prevent the quote from being typed
+            const adminPanel = document.querySelector('.admin-panel');
+            if (adminPanel) {
+                adminPanel.style.display = adminPanel.style.display === 'none' ? 'block' : 'none';
+                if (adminPanel.style.display === 'block') {
+                    updatePlayerList();
+                }
+            }
         }
     });
 
@@ -901,7 +912,6 @@ document.addEventListener('DOMContentLoaded', () => {
         minimapCtx.clearRect(0, 0, 150, 150);
         minimapCtx.fillStyle = 'rgba(0, 255, 0, 0.1)';
         minimapCtx.fillRect(0, 0, 150, 150);
-
         const playerX = (player.x / (map.width * tileSize)) * 150;
         const playerY = (player.y / (map.height * tileSize)) * 150;
         minimapCtx.fillStyle = '#e74c3c';
@@ -957,20 +967,15 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUI();
     });
 
-    function updatePlayerList() {
-        const playerSelect = document.getElementById('playerList');
-        if (!playerSelect) return;
-
-        playerSelect.innerHTML = '<option value="">Select Player</option>';
-        Object.entries(gameState.players).forEach(([id, player]) => {
-            if (id !== gameState.userId && !player.username.startsWith('bot_')) {  // Don't include self or bots
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = `${player.username} (ID: ${id})`;
-                playerSelect.appendChild(option);
-            }
-        });
-    }
+    // Socket event handler for admin command results
+    socket.on('admin_command_result', (data) => {
+        console.log('Admin command result:', data);
+        if (data.success) {
+            alert('Command executed successfully: ' + data.message);
+        } else {
+            alert('Command failed: ' + data.error);
+        }
+    });
 
     // Socket events for chat
     socket.on('chat_update', (data) => {
@@ -995,40 +1000,6 @@ document.addEventListener('DOMContentLoaded', () => {
         chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
     });
 
-
-    // Update socket events for admin commands
-    socket.on('admin_command_result', (data) => {
-        console.log('Received admin command result:', data);
-        const resultElement = document.createElement('div');
-        resultElement.style.cssText = `
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            z-index: 1001;
-        `;
-
-        if (data.success) {
-            resultElement.textContent = `Command executed successfully: ${data.message || ''}`;
-            if (data.command === 'kill' && data.target_id) {
-                console.log('Updating killed player state:', data.target_id);
-                if (gameState.players[data.target_id]) {
-                    gameState.players[data.target_id].health = 0;
-                    updateUI();
-                }
-            }
-        } else {
-            console.error('Command failed:', data.error);
-            resultElement.textContent = `Command failed: ${data.error || 'Unknown error'}`;
-        }
-
-        document.body.appendChild(resultElement);
-        setTimeout(() => document.body.removeChild(resultElement), 3000);
-    });
 
     // Add handler for player_died event
     socket.on('player_died', (data) => {

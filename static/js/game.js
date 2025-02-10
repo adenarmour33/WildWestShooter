@@ -1213,8 +1213,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function checkBulletCollisions() {
-    const PLAYER_HITBOX = 24;
+    const PLAYER_HITBOX = 32;
 
+    // Process both server bullets and local bullets
+    const allBullets = [...gameState.bullets, ...gameState.localBullets];
+    
     gameState.bullets = gameState.bullets.filter(bullet => {
         if (Date.now() - bullet.created_at > 2000) return false;
 
@@ -1223,26 +1226,22 @@ function checkBulletCollisions() {
             // Skip if:
             // - Target is the shooter
             // - Target is already dead
-            // - Target is the local player (handled separately)
-            if (id === bullet.shooter || targetPlayer.health <= 0 || id === socket.id) continue;
+            if (id === bullet.shooter || targetPlayer.health <= 0) continue;
 
             const dx = targetPlayer.x + PLAYER_SIZE / 2 - bullet.x;
             const dy = targetPlayer.y + PLAYER_SIZE / 2 - bullet.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
 
             if (distance < PLAYER_HITBOX) {
-                console.log('Hit detected on player/bot:', {
+                console.log('Hit detected:', {
                     targetId: id,
                     isBot: id.startsWith('bot_'),
                     damage: bullet.damage,
-                    shooterId: bullet.shooter,
-                    currentHealth: targetPlayer.health
+                    shooter: bullet.shooter
                 });
 
-                // Add hit effect
                 createHitEffect(bullet.x, bullet.y);
 
-                // Emit hit event to server
                 socket.emit('player_hit', {
                     damage: bullet.damage,
                     shooter: bullet.shooter,
@@ -1250,6 +1249,11 @@ function checkBulletCollisions() {
                     weapon: bullet.weapon,
                     is_bot: id.startsWith('bot_')
                 });
+
+                // Apply immediate visual feedback
+                if (targetPlayer) {
+                    targetPlayer.health = Math.max(0, targetPlayer.health - bullet.damage);
+                }
 
                 return false;
             }

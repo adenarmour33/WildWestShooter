@@ -666,37 +666,10 @@ document.addEventListener('DOMContentLoaded', () => {
         player.x = Math.max(0, Math.min(map.width * tileSize - PLAYER_SIZE, player.x));
         player.y = Math.max(0, Math.min(map.height * tileSize - PLAYER_SIZE, player.y));
 
+        // Check for power-up collisions
+        checkPowerupCollisions();
+
         // Update bullet positions and check collisions
-        gameState.bullets = gameState.bullets.filter(bullet => {
-            // Move bullet
-            bullet.x += Math.cos(bullet.angle) * BULLET_SPEED * timeScale;
-            bullet.y += Math.sin(bullet.angle) * BULLET_SPEED * timeScale;
-
-            // Check if bullet is still active (within bounds and lifetime)
-            const isActive = bullet.x >= 0 &&
-                               bullet.x <= map.width * tileSize &&
-                               bullet.y >= 0 &&
-                               bullet.y <= map.height * tileSize &&
-                               Date.now() - bullet.created_at < 2000;
-
-            return isActive;
-        });
-
-        // Update local bullets (not yet synced with server)
-        gameState.localBullets = gameState.localBullets.filter(bullet => {
-            bullet.x += Math.cos(bullet.angle) * BULLET_SPEED * timeScale;
-            bullet.y += Math.sin(bullet.angle) * BULLET_SPEED * timeScale;
-
-            const isActive = bullet.x >= 0 &&
-                               bullet.x <= map.width * tileSize &&
-                               bullet.y >= 0 &&
-                               bullet.y <= map.height * tileSize &&
-                               Date.now() - bullet.created_at < 2000;
-
-            return isActive;
-        });
-
-        // Check bullet collisions
         checkBulletCollisions();
 
         // Update camera with smooth following
@@ -1284,250 +1257,278 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Start the game loop
-    requestAnimationFrame(gameLoop);
-});
+    //requestAnimationFrame(gameLoop); //Removed for initGame()
 
-function checkBulletCollisions() {
-    const PLAYER_HITBOX = 32;
+    function checkBulletCollisions() {
+        const PLAYER_HITBOX = 32;
 
-    // Process both server bullets and local bullets
-    const allBullets = [...gameState.bullets, ...gameState.localBullets];
+        // Process both server bullets and local bullets
+        const allBullets = [...gameState.bullets, ...gameState.localBullets];
 
-    gameState.bullets = allBullets.filter(bullet => {
-        if (Date.now() - bullet.created_at > 2000) return false;
+        gameState.bullets = allBullets.filter(bullet => {
+            if (Date.now() - bullet.created_at > 2000) return false;
 
-        // Check collision with all players (including bots)
-        for (const [id, targetPlayer] of Object.entries(gameState.players)) {
-            // Skip if:
-            // - Target is the shooter
-            // - Target is already dead
-            // - Target is invulnerable (due to shield powerup)
-            if (id === bullet.shooter || targetPlayer.health <= 0 || targetPlayer.isInvulnerable) continue;
+            // Check collision with all players (including bots)
+            for (const [id, targetPlayer] of Object.entries(gameState.players)) {
+                // Skip if:
+                // - Target is the shooter
+                // - Target is already dead
+                // - Target is invulnerable (due to shield powerup)
+                if (id === bullet.shooter || targetPlayer.health <= 0 || targetPlayer.isInvulnerable) continue;
 
-            const dx = targetPlayer.x + PLAYER_SIZE / 2 - bullet.x;
-            const dy = targetPlayer.y + PLAYER_SIZE / 2 - bullet.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+                const dx = targetPlayer.x + PLAYER_SIZE / 2 - bullet.x;
+                const dy = targetPlayer.y + PLAYER_SIZE / 2 - bullet.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (distance < PLAYER_HITBOX) {
-                console.log('Hit detected:', {
-                    targetId: id,
-                    isBot: id.startsWith('bot_'),
-                    damage: bullet.damage,
-                    shooter: bullet.shooter
-                });
+                if (distance < PLAYER_HITBOX) {
+                    console.log('Hit detected:', {
+                        targetId: id,
+                        isBot: id.startsWith('bot_'),
+                        damage: bullet.damage,
+                        shooter: bullet.shooter
+                    });
 
-                createHitEffect(bullet.x, bullet.y);
+                    createHitEffect(bullet.x, bullet.y);
 
-                socket.emit('player_hit', {
-                    damage: bullet.damage,
-                    shooter: bullet.shooter,
-                    target_id: id,
-                    weapon: bullet.weapon,
-                    is_bot: id.startsWith('bot_')
-                });
+                    socket.emit('player_hit', {
+                        damage: bullet.damage,
+                        shooter: bullet.shooter,
+                        target_id: id,
+                        weapon: bullet.weapon,
+                        is_bot: id.startsWith('bot_')
+                    });
 
-                // Apply immediate visual feedback
-                if (targetPlayer) {
-                    targetPlayer.health = Math.max(0, targetPlayer.health - bullet.damage);
-                    createHitEffect(targetPlayer.x + PLAYER_SIZE / 2, targetPlayer.y + PLAYER_SIZE / 2);
+                    // Apply immediate visual feedback
+                    if (targetPlayer) {
+                        targetPlayer.health = Math.max(0, targetPlayer.health - bullet.damage);
+                        createHitEffect(targetPlayer.x + PLAYER_SIZE / 2, targetPlayer.y + PLAYER_SIZE / 2);
+                    }
+                    return false;
                 }
-                return false;
+            }
+
+            // Check collision with local player
+            if (bullet.shooter !== socket.id && player.health > 0 && !player.isInvulnerable) {
+                const dx = player.x + PLAYER_SIZE / 2 - bullet.x;
+                const dy = player.y + PLAYER_SIZE / 2 - bullet.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < PLAYER_HITBOX) {
+                    console.log('Hit detected on local player:', {
+                        damage: bullet.damage,
+                        shooterId: bullet.shooter,
+                        currentHealth: player.health
+                    });
+
+                    // Add hit effect
+                    createHitEffect(bullet.x, bullet.y);
+
+                    // Emit hit event to server
+                    socket.emit('player_hit', {
+                        damage: bullet.damage,
+                        shooter: bullet.shooter,
+                        target_id: socket.id,
+                        weapon: bullet.weapon
+                    });
+
+                    // Apply damage locally for immediate feedback
+                    player.health = Math.max(0, player.health - bullet.damage);
+                    updateUI();
+
+                    return false;
+                }
+            }
+
+            // Update bullet position
+            bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
+            bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
+
+            // Keep bullet in bounds
+            return bullet.x >= 0 && bullet.x <= map.width * tileSize &&
+                   bullet.y >= 0 && bullet.y <= map.height * tileSize;
+        });
+    }
+
+    function createHitEffect(x, y) {
+        const particles = [];
+        for (let i = 0; i < 8; i++) {
+            const angle = (Math.PI * 2 / 8) * i;
+            particles.push({
+                x: x,
+                y: y,
+                dx: Math.cos(angle) * 2,
+                dy: Math.sin(angle) * 2,
+                life: 20
+            });
+        }
+
+        // Update and draw particles
+        function updateParticles() {
+            particles.forEach(p => {
+                p.x += p.dx;
+                p.y += p.dy;
+                p.life--;
+
+                if (p.life > 0) {
+                    const screenX = p.x - camera.x;
+                    const screenY = p.y - camera.y;
+                    ctx.fillStyle = `rgba(255, 255, 0, ${p.life / 20})`;
+                    ctx.fillRect(screenX - 2, screenY - 2, 4, 4);
+                }
+            });
+
+            if (particles.some(p => p.life > 0)) {
+                requestAnimationFrame(updateParticles);
             }
         }
 
-        // Check collision with local player
-        if (bullet.shooter !== socket.id && player.health > 0 && !player.isInvulnerable) {
-            const dx = player.x + PLAYER_SIZE / 2 - bullet.x;
-            const dy = player.y + PLAYER_SIZE / 2 - bullet.y;
+        updateParticles();
+    }
+
+    let joystick = {
+        base: document.getElementById('joystickBase'),
+        stick: document.getElementById('joystickStick'),
+        active: false,
+        baseX: 0,
+        baseY: 0,
+        deltaX: 0,
+        deltaY: 0
+    };
+
+    function drawBullet(bullet) {
+        const screenX = bullet.x - camera.x;
+        const screenY = bullet.y - camera.y;
+
+        ctx.save();
+        ctx.translate(screenX, screenY);
+        ctx.rotate(bullet.angle);
+
+        // Make bullets more visible with glow effect
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#ffff00';
+
+        // Larger, more visible bullet
+        ctx.fillStyle = '#fff700';
+        ctx.fillRect(-6, -3, 12, 6);
+
+        // Add bright center
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-4, -2, 8, 4);
+
+        ctx.restore();
+    }
+
+    // Add powerup spawning function after the createChatUI function
+    function spawnPowerup() {
+        const types = ['speed', 'shield', 'damage'];
+        const type = types[Math.floor(Math.random() * types.length)];
+        const powerup = {
+            type: type,
+            x: Math.random() * (map.width * tileSize - 32),
+            y: Math.random() * (map.height * tileSize - 32),
+            createdAt: Date.now()
+        };
+        gameState.powerups.push(powerup);
+        return powerup;
+    }
+
+    // Add powerup collection check in the update function
+    function checkPowerupCollisions() {
+        const PICKUP_RADIUS = 20;
+        gameState.powerups = gameState.powerups.filter(powerup => {
+            const dx = player.x + PLAYER_SIZE / 2 - (powerup.x + 16);
+            const dy = player.y + PLAYER_SIZE / 2 - (powerup.y + 16);
             const distance = Math.sqrt(dx * dx + dy * dy);
 
-            if (distance < PLAYER_HITBOX) {
-                console.log('Hit detected on local player:', {
-                    damage: bullet.damage,
-                    shooterId: bullet.shooter,
-                    currentHealth: player.health
-                });
-
-                // Add hit effect
-                createHitEffect(bullet.x, bullet.y);
-
-                // Emit hit event to server
-                socket.emit('player_hit', {
-                    damage: bullet.damage,
-                    shooter: bullet.shooter,
-                    target_id: socket.id,
-                    weapon: bullet.weapon
-                });
-
-                // Apply damage locally for immediate feedback
-                player.health = Math.max(0, player.health - bullet.damage);
-                updateUI();
-
+            if (distance < PICKUP_RADIUS) {
+                activatePowerup(powerup.type);
                 return false;
             }
-        }
-
-        // Update bullet position
-        bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
-        bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
-
-        // Keep bullet in bounds
-        return bullet.x >= 0 && bullet.x <= map.width * tileSize &&
-               bullet.y >= 0 && bullet.y <= map.height * tileSize;
-    });
-}
-
-function createHitEffect(x, y) {
-    const particles = [];
-    for (let i = 0; i < 8; i++) {
-        const angle = (Math.PI * 2 / 8) * i;
-        particles.push({
-            x: x,
-            y: y,
-            dx: Math.cos(angle) * 2,
-            dy: Math.sin(angle) * 2,
-            life: 20
+            return true;
         });
     }
 
-    // Update and draw particles
-    function updateParticles() {
-        particles.forEach(p => {
-            p.x += p.dx;
-            p.y += p.dy;
-            p.life--;
+    // Add powerup activation function
+    function activatePowerup(type) {
+        const powerup = POWERUPS[type];
+        const now = Date.now();
 
-            if (p.life > 0) {
-                const screenX = p.x - camera.x;
-                const screenY = p.y - camera.y;
-                ctx.fillStyle = `rgba(255, 255, 0, ${p.life / 20})`;
-                ctx.fillRect(screenX - 2, screenY - 2, 4, 4);
-            }
-        });
-
-        if (particles.some(p => p.life > 0)) {
-            requestAnimationFrame(updateParticles);
+        // Deactivate existing powerup of same type if active
+        if (gameState.activePowerups[type]) {
+            clearTimeout(gameState.activePowerups[type].timeoutId);
         }
+
+        // Apply powerup effect
+        switch (type) {
+            case 'speed':
+                player.speedMultiplier = powerup.multiplier;
+                break;
+            case 'shield':
+                player.isInvulnerable = true;
+                break;
+            case 'damage':
+                player.damageMultiplier = powerup.multiplier;
+                break;
+        }
+
+        // Set deactivation timeout
+        const timeoutId = setTimeout(() => {
+            deactivatePowerup(type);
+        }, powerup.duration);
+
+        gameState.activePowerups[type] = {
+            activatedAt: now,
+            timeoutId: timeoutId
+        };
+
+        // Schedule next powerup spawn
+        setTimeout(spawnPowerup, powerup.respawnTime);
     }
 
-    updateParticles();
-}
-
-let joystick = {
-    base: document.getElementById('joystickBase'),
-    stick: document.getElementById('joystickStick'),
-    active: false,
-    baseX: 0,
-    baseY: 0,
-    deltaX: 0,
-    deltaY: 0
-};
-
-function drawBullet(bullet) {
-    const screenX = bullet.x - camera.x;
-    const screenY = bullet.y - camera.y;
-
-    ctx.save();
-    ctx.translate(screenX, screenY);
-    ctx.rotate(bullet.angle);
-
-    // Make bullets more visible with glow effect
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = '#ffff00';
-
-    // Larger, more visible bullet
-    ctx.fillStyle = '#fff700';
-    ctx.fillRect(-6, -3, 12, 6);
-
-    // Add bright center
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(-4, -2, 8, 4);
-
-    ctx.restore();
-}
-
-// Add powerup spawning function after the createChatUI function
-function spawnPowerup() {
-    const types = ['speed', 'shield', 'damage'];
-    const type = types[Math.floor(Math.random() * types.length)];
-    const powerup = {
-        type: type,
-        x: Math.random() * (map.width * tileSize - 32),
-        y: Math.random() * (map.height * tileSize - 32),
-        createdAt: Date.now()
-    };
-    gameState.powerups.push(powerup);
-    return powerup;
-}
-
-// Add powerup collection check in the update function
-function checkPowerupCollisions() {
-    const PICKUP_RADIUS = 20;
-    gameState.powerups = gameState.powerups.filter(powerup => {
-        const dx = player.x + PLAYER_SIZE / 2 - (powerup.x + 16);
-        const dy = player.y + PLAYER_SIZE / 2 - (powerup.y + 16);
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (distance < PICKUP_RADIUS) {
-            activatePowerup(powerup.type);
-            return false;
+    // Add powerup deactivation function
+    function deactivatePowerup(type) {
+        switch (type) {
+            case 'speed':
+                player.speedMultiplier = 1;
+                break;
+            case 'shield':
+                player.isInvulnerable = false;
+                break;
+            case 'damage':
+                player.damageMultiplier = 1;
+                break;
         }
-        return true;
+        delete gameState.activePowerups[type];
+    }
+
+    // Initialize first powerup spawn when game starts
+    //setTimeout(spawnPowerup, 5000); //Removed for initGame()
+
+    // Main game loop
+    function gameLoop(timestamp) {
+        const deltaTime = timestamp - lastUpdate;
+        lastUpdate = timestamp;
+
+        update(deltaTime);
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Initialize game
+    function initGame() {
+        lastUpdate = performance.now();
+        // Spawn initial power-ups
+        for (let i = 0; i < 3; i++) {
+            spawnPowerup();
+        }
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Start the game when socket connects
+    socket.on('connect', () => {
+        console.log('Connected to server');
+        socket.emit('authenticate');
+        initGame();
     });
-}
 
-// Add powerup activation function
-function activatePowerup(type) {
-    const powerup = POWERUPS[type];
-    const now = Date.now();
-
-    // Deactivate existing powerup of same type if active
-    if (gameState.activePowerups[type]) {
-        clearTimeout(gameState.activePowerups[type].timeoutId);
-    }
-
-    // Apply powerup effect
-    switch (type) {
-        case 'speed':
-            player.speedMultiplier = powerup.multiplier;
-            break;
-        case 'shield':
-            player.isInvulnerable = true;
-            break;
-        case 'damage':
-            player.damageMultiplier = powerup.multiplier;
-            break;
-    }
-
-    // Set deactivation timeout
-    const timeoutId = setTimeout(() => {
-        deactivatePowerup(type);
-    }, powerup.duration);
-
-    gameState.activePowerups[type] = {
-        activatedAt: now,
-        timeoutId: timeoutId
-    };
-
-    // Schedule next powerup spawn
-    setTimeout(spawnPowerup, powerup.respawnTime);
-}
-
-// Add powerup deactivation function
-function deactivatePowerup(type) {
-    switch (type) {
-        case 'speed':
-            player.speedMultiplier = 1;
-            break;
-        case 'shield':
-            player.isInvulnerable = false;
-            break;
-        case 'damage':
-            player.damageMultiplier = 1;
-            break;
-    }
-    delete gameState.activePowerups[type];
-}
-
-// Initialize first powerup spawn when game starts
-setTimeout(spawnPowerup, 5000);
+});

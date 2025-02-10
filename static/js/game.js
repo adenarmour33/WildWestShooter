@@ -598,10 +598,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Check if bullet is still active (within bounds and lifetime)
             const isActive = bullet.x >= 0 && 
-                           bullet.x <= map.width * tileSize && 
-                           bullet.y >= 0 && 
-                           bullet.y <= map.height * tileSize &&
-                           Date.now() - bullet.created_at < 2000;
+                               bullet.x <= map.width * tileSize && 
+                               bullet.y >= 0 && 
+                               bullet.y <= map.height * tileSize &&
+                               Date.now() - bullet.created_at < 2000;
 
             return isActive;
         });
@@ -612,10 +612,10 @@ document.addEventListener('DOMContentLoaded', () => {
             bullet.y += Math.sin(bullet.angle) * BULLET_SPEED * timeScale;
 
             const isActive = bullet.x >= 0 && 
-                           bullet.x <= map.width * tileSize && 
-                           bullet.y >= 0 && 
-                           bullet.y <= map.height * tileSize &&
-                           Date.now() - bullet.created_at < 2000;
+                               bullet.x <= map.width * tileSize && 
+                               bullet.y >= 0 && 
+                               bullet.y <= map.height * tileSize &&
+                               Date.now() - bullet.created_at < 2000;
 
             return isActive;
         });
@@ -642,7 +642,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function drawBullet(bullet) {
-        if (!bullet.active) return;
         const screenX = bullet.x - camera.x;
         const screenY = bullet.y - camera.y;
 
@@ -1263,7 +1262,6 @@ let joystick = {
 };
 
 function drawBullet(bullet) {
-    if (!bullet.active) return;
     const screenX = bullet.x - camera.x;
     const screenY = bullet.y - camera.y;
 

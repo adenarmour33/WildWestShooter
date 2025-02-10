@@ -20,12 +20,12 @@ let gameState = {
     adminIds: new Set()
 };
 
-// Game constants
+// Update weapon damage values to be more impactful
 const WEAPONS = {
-    pistol: { damage: 15, fireRate: 400, spread: 0.1, ammo: 30, maxAmmo: 30 },
-    shotgun: { damage: 8, fireRate: 800, spread: 0.3, pellets: 5, ammo: 10, maxAmmo: 10 },
-    smg: { damage: 10, fireRate: 150, spread: 0.15, ammo: 45, maxAmmo: 45 },
-    knife: { damage: 35, fireRate: 500, range: 50 }
+    pistol: { damage: 25, fireRate: 400, spread: 0.1, ammo: 30, maxAmmo: 30 },
+    shotgun: { damage: 15, fireRate: 800, spread: 0.3, pellets: 5, ammo: 10, maxAmmo: 10 },
+    smg: { damage: 15, fireRate: 150, spread: 0.15, ammo: 45, maxAmmo: 45 },
+    knife: { damage: 50, fireRate: 500, range: 50 }
 };
 
 // Game constants
@@ -419,6 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Update shoot function to properly set bullet damage
     function shoot() {
         const now = Date.now();
         const weapon = WEAPONS[player.currentWeapon];
@@ -442,19 +443,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 const spread = (Math.random() - 0.5) * weapon.spread;
                 const angle = player.rotation + spread;
 
-                // Calculate bullet spawn position from the center of the player
                 const bulletX = player.x + PLAYER_SIZE / 2;
                 const bulletY = player.y + PLAYER_SIZE / 2;
 
-                const bullet = new Bullet(
-                    bulletX,
-                    bulletY,
-                    angle,
-                    BULLET_SPEED,
-                    weapon.damage,
-                    player.currentWeapon,
-                    socket.id
-                );
+                const bullet = {
+                    x: bulletX,
+                    y: bulletY,
+                    angle: angle,
+                    damage: weapon.damage,
+                    shooter: socket.id,
+                    weapon: player.currentWeapon,
+                    created_at: Date.now()
+                };
+
                 gameState.localBullets.push(bullet);
 
                 socket.emit('player_shoot', {
@@ -557,7 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
             bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
 
             // Keep bullet in bounds
-            return bullet.x >= 0 && bullet.x <= map.width * tileSize && 
+            return bullet.x >= 0 && bullet.x <= map.width * tileSize &&
                    bullet.y >= 0 && bullet.y <= map.height * tileSize;
         });
     }
@@ -1120,6 +1121,14 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUI();
     });
 
+    // Update socket.on handlers to properly handle damage
+    socket.on('player_hit', (data) => {
+        if (player.health > 0) {
+            player.health = Math.max(0, player.health - data.damage);
+            updateUI();
+        }
+    });
+
     // Start the game loop
     requestAnimationFrame(gameLoop);
 });
@@ -1250,7 +1259,7 @@ function checkBulletCollisions() {
         bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
 
         // Keep bullet in bounds
-        return bullet.x >= 0 && bullet.x <= map.width * tileSize && 
+        return bullet.x >= 0 && bullet.x <= map.width * tileSize &&
                bullet.y >= 0 && bullet.y <= map.height * tileSize;
     });
 }

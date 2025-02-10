@@ -22,11 +22,11 @@
             <select id="playerList" class="form-select mb-2">
                 <option value="">Select Player</option>
             </select>
-            <button class="btn btn-danger mb-2 w-100" onclick="adminKillPlayer()">Instant Kill</button>
-            <button class="btn btn-warning mb-2 w-100" onclick="adminToggleGodMode()">Toggle God Mode</button>
-            <button class="btn btn-info mb-2 w-100" onclick="adminToggleModerator()">Toggle Moderator</button>
-            <button class="btn btn-danger mb-2 w-100" onclick="adminKickPlayer()">Kick Player</button>
-            <button class="btn btn-warning mb-2 w-100" onclick="adminMutePlayer()">Mute Player</button>
+            <button id="killButton" class="btn btn-danger mb-2 w-100">Instant Kill</button>
+            <button id="godModeButton" class="btn btn-warning mb-2 w-100">Toggle God Mode</button>
+            <button id="modButton" class="btn btn-info mb-2 w-100">Toggle Moderator</button>
+            <button id="kickButton" class="btn btn-danger mb-2 w-100">Kick Player</button>
+            <button id="muteButton" class="btn btn-warning mb-2 w-100">Mute Player</button>
         </div>
         {% endif %}
 

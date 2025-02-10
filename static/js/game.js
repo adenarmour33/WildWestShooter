@@ -5,7 +5,7 @@ let lastUpdate = 0;
 const UPDATE_INTERVAL = 1000 / 60; // 60fps target
 const NETWORK_UPDATE_INTERVAL = 50; // Send updates every 50ms
 let lastNetworkUpdate = 0;
-let camera;
+let camera = null; // Initialize as null first
 
 // Initialize gameState globally
 let gameState = {
@@ -85,6 +85,14 @@ assets.weapons.smg.src = '/static/assets/weapons/smg.svg';
 assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
 
 
+function resizeCanvas() {
+    if (!canvas || !camera) return; // Add null check
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    camera.width = canvas.width;
+    camera.height = canvas.height;
+}
+
 // Initialize game after DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM Content Loaded');
@@ -97,9 +105,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     ctx = canvas.getContext('2d');
 
+    // Initialize camera
+    camera = {
+        x: 0,
+        y: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        followTarget: function(target, smooth = 0.1) {
+            const targetX = target.x - this.width / 2;
+            const targetY = target.y - this.height / 2;
+            this.x += (targetX - this.x) * smooth;
+            this.y += (targetY - this.y) * smooth;
+            this.x = Math.max(0, Math.min(this.x, map.width * tileSize - this.width));
+            this.y = Math.max(0, Math.min(this.y, map.height * tileSize - this.height));
+        }
+    };
+
+    // Now that both canvas and camera are initialized, we can setup resize handler
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas(); // Initial resize
+
     // Initialize socket
     socket = io();
-
     // Setup socket event handlers
     socket.on('connect', () => {
         console.log('Connected to server');
@@ -254,39 +281,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Asset loading
-    let assets = {
-        tiles: {
-            grass: new Image(),
-            sand: new Image(),
-            tree: new Image()
-        },
-        player: new Image(),
-        weapons: {
-            pistol: new Image(),
-            shotgun: new Image(),
-            smg: new Image(),
-            knife: new Image()
-        }
-    };
+    // Asset loading (duplicate removed)
 
-    // Load assets with SVG paths
-    assets.tiles.grass.src = '/static/assets/tiles/grass.svg';
-    assets.tiles.sand.src = '/static/assets/tiles/sand.svg';
-    assets.tiles.tree.src = '/static/assets/tiles/tree.svg';
-    assets.player.src = '/static/assets/player.svg';
-    assets.weapons.pistol.src = '/static/assets/weapons/pistol.svg';
-    assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.svg';
-    assets.weapons.smg.src = '/static/assets/weapons/smg.svg';
-    assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
+    // Game constants (duplicate removed)
 
-
-    // Game constants
-    const PLAYER_SIZE = 32;
-    const PLAYER_SPEED = 5;
-    const BULLET_SPEED = 15;
-
-    // Map configuration
+    // Map configuration (duplicate removed)
     let player = {
         x: Math.random() * (map.width * tileSize - PLAYER_SIZE),
         y: Math.random() * (map.height * tileSize - PLAYER_SIZE),
@@ -311,15 +310,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const minimapElement = document.getElementById('minimap');
     const minimapCtx = minimapElement ? minimapElement.getContext('2d') : null;
 
-    function resizeCanvas() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        camera.width = canvas.width;
-        camera.height = canvas.height;
-    }
-
     window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
+    
 
     const keys = {};
     let mouseX = 0, mouseY = 0;
@@ -678,26 +670,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Initialize camera with canvas dimensions
-    camera = {
-        x: 0,
-        y: 0,
-        width: window.innerWidth, // Use window dimensions initially
-        height: window.innerHeight,
-        followTarget: function(target, smooth = 0.1) {
-            const targetX = target.x - this.width / 2;
-            const targetY = target.y - this.height / 2;
-
-            this.x += (targetX - this.x) * smooth;
-            this.y += (targetY - this.y) * smooth;
-
-            this.x = Math.max(0, Math.min(this.x, map.width * tileSize - this.width));
-            this.y = Math.max(0, Math.min(this.y, map.height * tileSize - this.height));
-        }
-    };
 
     window.addEventListener('resize', resizeCanvas);
-    resizeCanvas(); // Initial resize
+    
 
     // Chat UI creation
     function createChatUI() {
@@ -926,8 +901,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         padding: 10px 20px;
                         border-radius: 5px;
                         z-index: 1001;
-                    `;                    resultElement.textContent = 'Access denied: Admin privileges required';
-                    document.body.appendChild(resultElement);
+                    `;                    resultElement.textContent = 'Access denied: Admin privileges required';                    document.body.appendChild(resultElement);
                     setTimeout(() => document.body.removeChild(resultElement), 3000);
                 }
                 cmdInput.value = '';

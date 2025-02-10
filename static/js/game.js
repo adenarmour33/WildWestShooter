@@ -504,12 +504,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function checkBulletCollisions() {
-        const PLAYER_HITBOX = 32; // Increased hitbox size for better hit detection
+        const PLAYER_HITBOX = 24; // Slightly smaller hitbox for better hit detection
 
-        // Update and filter bullets
         gameState.bullets = gameState.bullets.filter(bullet => {
-            // Check for bullet lifetime first
-            if (Date.now() - bullet.spawnTime > 2000) {
+            // Check bullet lifetime
+            if (Date.now() - bullet.created_at > 2000) {
                 return false;
             }
 
@@ -520,16 +519,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
                 if (distance < PLAYER_HITBOX) {
+                    // Add hit effect
+                    createHitEffect(bullet.x, bullet.y);
+
                     socket.emit('player_hit', {
                         damage: bullet.damage,
                         shooter: bullet.shooter,
                         target_id: socket.id
                     });
-                    return false; // Remove bullet after hit
+                    return false;
                 }
             }
 
-            // Check collision with other players and bots
+            // Check collision with other players
             for (const [id, otherPlayer] of Object.entries(gameState.players)) {
                 if (id === bullet.shooter || otherPlayer.health <= 0 || id === socket.id) continue;
 
@@ -538,35 +540,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
                 if (distance < PLAYER_HITBOX) {
+                    // Add hit effect
+                    createHitEffect(bullet.x, bullet.y);
+
                     socket.emit('player_hit', {
                         damage: bullet.damage,
                         shooter: bullet.shooter,
                         target_id: id
                     });
-                    return false; // Remove bullet after hit
+                    return false;
                 }
             }
 
             // Update bullet position
-            const speed = bullet.speed || BULLET_SPEED;
-            bullet.x += Math.cos(bullet.angle) * speed;
-            bullet.y += Math.sin(bullet.angle) * speed;
+            bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
+            bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
 
-            // Keep bullet in game bounds
-            const mapWidth = 50 * tileSize;
-            const mapHeight = 50 * tileSize;
-            if (bullet.x < 0 || bullet.x > mapWidth || bullet.y < 0 || bullet.y > mapHeight) {
-                return false;
-            }
-
-            return true; // Keep bullet if no collision
-        });
-
-        // Clean up local bullets
-        gameState.localBullets = gameState.localBullets.filter(bullet => {
-            if (!bullet.active) return false;
-            bullet.update(16.67);
-            return bullet.active;
+            // Keep bullet in bounds
+            return bullet.x >= 0 && bullet.x <= map.width * tileSize && 
+                   bullet.y >= 0 && bullet.y <= map.height * tileSize;
         });
     }
 
@@ -633,9 +625,17 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.translate(screenX, screenY);
         ctx.rotate(bullet.angle);
 
-        // Draw bullet as a small elongated rectangle
-        ctx.fillStyle = '#f1c40f';
-        ctx.fillRect(-4, -1, 8, 2);
+        // Make bullets more visible with glow effect
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#ffff00';
+
+        // Larger, more visible bullet
+        ctx.fillStyle = '#fff700';
+        ctx.fillRect(-6, -3, 12, 6);
+
+        // Add bright center
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-4, -2, 8, 4);
 
         ctx.restore();
     }
@@ -1169,3 +1169,125 @@ let joystick = {
     deltaX: 0,
     deltaY: 0
 };
+
+// Update the bullet drawing function
+function drawBullet(bullet) {
+    if (!bullet.active) return;
+    const screenX = bullet.x - camera.x;
+    const screenY = bullet.y - camera.y;
+
+    ctx.save();
+    ctx.translate(screenX, screenY);
+    ctx.rotate(bullet.angle);
+
+    // Make bullets more visible with glow effect
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#ffff00';
+
+    // Larger, more visible bullet
+    ctx.fillStyle = '#fff700';
+    ctx.fillRect(-6, -3, 12, 6);
+
+    // Add bright center
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-4, -2, 8, 4);
+
+    ctx.restore();
+}
+
+// Update bullet collision detection
+function checkBulletCollisions() {
+    const PLAYER_HITBOX = 24; // Slightly smaller hitbox for better hit detection
+
+    gameState.bullets = gameState.bullets.filter(bullet => {
+        // Check bullet lifetime
+        if (Date.now() - bullet.created_at > 2000) {
+            return false;
+        }
+
+        // Check collision with current player
+        if (bullet.shooter !== socket.id && player.health > 0) {
+            const dx = player.x + PLAYER_SIZE / 2 - bullet.x;
+            const dy = player.y + PLAYER_SIZE / 2 - bullet.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < PLAYER_HITBOX) {
+                // Add hit effect
+                createHitEffect(bullet.x, bullet.y);
+
+                socket.emit('player_hit', {
+                    damage: bullet.damage,
+                    shooter: bullet.shooter,
+                    target_id: socket.id
+                });
+                return false;
+            }
+        }
+
+        // Check collision with other players
+        for (const [id, otherPlayer] of Object.entries(gameState.players)) {
+            if (id === bullet.shooter || otherPlayer.health <= 0 || id === socket.id) continue;
+
+            const dx = otherPlayer.x + PLAYER_SIZE / 2 - bullet.x;
+            const dy = otherPlayer.y + PLAYER_SIZE / 2 - bullet.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < PLAYER_HITBOX) {
+                // Add hit effect
+                createHitEffect(bullet.x, bullet.y);
+
+                socket.emit('player_hit', {
+                    damage: bullet.damage,
+                    shooter: bullet.shooter,
+                    target_id: id
+                });
+                return false;
+            }
+        }
+
+        // Update bullet position
+        bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
+        bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
+
+        // Keep bullet in bounds
+        return bullet.x >= 0 && bullet.x <= map.width * tileSize && 
+               bullet.y >= 0 && bullet.y <= map.height * tileSize;
+    });
+}
+
+// Add hit effect function
+function createHitEffect(x, y) {
+    const particles = [];
+    for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 / 8) * i;
+        particles.push({
+            x: x,
+            y: y,
+            dx: Math.cos(angle) * 2,
+            dy: Math.sin(angle) * 2,
+            life: 20
+        });
+    }
+
+    // Update and draw particles
+    function updateParticles() {
+        particles.forEach(p => {
+            p.x += p.dx;
+            p.y += p.dy;
+            p.life--;
+
+            if (p.life > 0) {
+                const screenX = p.x - camera.x;
+                const screenY = p.y - camera.y;
+                ctx.fillStyle = `rgba(255, 255, 0, ${p.life / 20})`;
+                ctx.fillRect(screenX - 2, screenY - 2, 4, 4);
+            }
+        });
+
+        if (particles.some(p => p.life > 0)) {
+            requestAnimationFrame(updateParticles);
+        }
+    }
+
+    updateParticles();
+}

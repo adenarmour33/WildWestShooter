@@ -500,23 +500,29 @@ def handle_player_hit(data):
             if target_id and target_id in game_rooms[room].players:
                 target = game_rooms[room].players[target_id]
 
-                # Check if target is a bot
+                # Handle bot damage
                 if target_id.startswith('bot_'):
-                    # Bots don't have god mode, directly apply damage
                     damage = data.get('damage', 15)
                     target['health'] = max(0, target['health'] - damage)
                 else:
-                    # Handle regular players
-                    target_user_id = player_states[target_id]['user_id']
-                    if not target_user_id.startswith('guest_'):
-                        user = User.query.get(target_user_id)
-                        if user and user.god_mode:
-                            return
+                    # Handle player damage
+                    if target_id in player_states:
+                        target_user_id = player_states[target_id]['user_id']
 
-                    damage = data.get('damage', 15)
-                    target['health'] = max(0, target['health'] - damage)
-                    emit('player_hit', {'damage': damage}, room=target_id)
+                        # Convert integer user_id to string for checking
+                        target_user_id = str(target_user_id) if isinstance(target_user_id, int) else target_user_id
 
+                        # Check for god mode only for registered users
+                        if not target_user_id.startswith('guest_'):
+                            user = User.query.get(int(target_user_id))
+                            if user and user.god_mode:
+                                return
+
+                        damage = data.get('damage', 15)
+                        target['health'] = max(0, target['health'] - damage)
+                        emit('player_hit', {'damage': damage}, room=target_id)
+
+                # Handle player death
                 if target['health'] <= 0:
                     shooter = data.get('shooter')
                     if shooter and shooter in game_rooms[room].players:
@@ -526,13 +532,13 @@ def handle_player_hit(data):
                         emit('player_kill', {}, room=shooter)
 
                     spawn = game_rooms[room].respawn_player(target_id)
-                    if spawn:
-                        if not target_id.startswith('bot_'):  # Only emit respawn for real players
-                            emit('player_respawn', {
-                                'x': spawn['x'],
-                                'y': spawn['y']
-                            }, room=target_id)
+                    if spawn and not target_id.startswith('bot_'):
+                        emit('player_respawn', {
+                            'x': spawn['x'],
+                            'y': spawn['y']
+                        }, room=target_id)
 
+                # Update game state for all players
                 emit('game_state', {
                     'players': game_rooms[room].players,
                     'bullets': game_rooms[room].bullets,

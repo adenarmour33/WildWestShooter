@@ -562,19 +562,19 @@ def handle_admin_command(data):
             }, room=request.sid)
             return
 
+        if target_id not in game_rooms[room].players:
+            logging.debug(f"Command failed - Target {target_id} not found")
+            emit('admin_command_result', {
+                'success': False,
+                'error': 'Target player not found'
+            }, room=request.sid)
+            return
+
         if command == 'kill':
             if not is_admin:
                 emit('admin_command_result', {
                     'success': False,
                     'error': 'Kill command requires admin privileges'
-                }, room=request.sid)
-                return
-
-            if target_id not in game_rooms[room].players:
-                logging.debug(f"Kill command failed - Target {target_id} not found")
-                emit('admin_command_result', {
-                    'success': False,
-                    'error': 'Target player not found'
                 }, room=request.sid)
                 return
 
@@ -602,22 +602,48 @@ def handle_admin_command(data):
             emit('player_died', {'killer': request.sid}, room=target_id)
             logging.debug(f"Kill command executed successfully on {target_id}")
 
-        if command in ['kick', 'mute'] and target_id in player_states:
-            target_user_id = player_states[target_id]['user_id']
-            if not target_user_id.startswith('guest_'):
-                user = User.query.get(target_user_id)
-                if user:
-                    if command == 'kick':
-                        emit('kicked', {'reason': data.get('reason', 'Kicked by moderator')}, room=target_id)
+        elif command == 'kick' and not target_id.startswith('bot_'):
+            if target_id in player_states:
+                target_user_id = player_states[target_id]['user_id']
+                if not target_user_id.startswith('guest_'):
+                    user = User.query.get(target_user_id)
+                    if user:
+                        reason = data.get('reason', 'Kicked by moderator')
+                        emit('kicked', {'reason': reason}, room=target_id)
                         disconnect(target_id)
-                    elif command == 'mute':
-                        user.is_muted = True
-                        user.mute_end_time = datetime.now() + timedelta(minutes=int(data.get('duration', 5)))
-                        db.session.commit()
-                        emit('muted', {'duration': data.get('duration', 5)}, room=target_id)
+                        emit('admin_command_result', {
+                            'success': True,
+                            'message': f'Successfully kicked player {user.username}'
+                        }, room=request.sid)
+                        return
+            emit('admin_command_result', {
+                'success': False,
+                'error': 'Could not kick player'
+            }, room=request.sid)
 
-        if session.get('is_admin'):
-            if command == 'god_mode' and target_id in player_states:
+        elif command == 'mute' and not target_id.startswith('bot_'):
+            if target_id in player_states:
+                target_user_id = player_states[target_id]['user_id']
+                if not target_user_id.startswith('guest_'):
+                    user = User.query.get(target_user_id)
+                    if user:
+                        duration = int(data.get('duration', 5))
+                        user.is_muted = True
+                        user.mute_end_time = datetime.now() + timedelta(minutes=duration)
+                        db.session.commit()
+                        emit('muted', {'duration': duration}, room=target_id)
+                        emit('admin_command_result', {
+                            'success': True,
+                            'message': f'Successfully muted player {user.username} for {duration} minutes'
+                        }, room=request.sid)
+                        return
+            emit('admin_command_result', {
+                'success': False,
+                'error': 'Could not mute player'
+            }, room=request.sid)
+
+        elif command == 'god_mode' and is_admin and not target_id.startswith('bot_'):
+            if target_id in player_states:
                 target_user_id = player_states[target_id]['user_id']
                 if not target_user_id.startswith('guest_'):
                     user = User.query.get(target_user_id)
@@ -627,6 +653,33 @@ def handle_admin_command(data):
                         if target_id in game_rooms[room].players:
                             game_rooms[room].players[target_id]['godMode'] = user.god_mode
                             emit('god_mode_update', {'enabled': user.god_mode}, room=target_id)
+                            emit('admin_command_result', {
+                                'success': True,
+                                'message': f'God mode {"enabled" if user.god_mode else "disabled"} for {user.username}'
+                            }, room=request.sid)
+                            return
+            emit('admin_command_result', {
+                'success': False,
+                'error': 'Could not toggle god mode'
+            }, room=request.sid)
+
+        elif command == 'mod' and is_admin and not target_id.startswith('bot_'):
+            if target_id in player_states:
+                target_user_id = player_states[target_id]['user_id']
+                if not target_user_id.startswith('guest_'):
+                    user = User.query.get(target_user_id)
+                    if user:
+                        user.is_moderator = not user.is_moderator
+                        db.session.commit()
+                        emit('admin_command_result', {
+                            'success': True,
+                            'message': f'Moderator status {"enabled" if user.is_moderator else "disabled"} for {user.username}'
+                        }, room=request.sid)
+                        return
+            emit('admin_command_result', {
+                'success': False,
+                'error': 'Could not toggle moderator status'
+            }, room=request.sid)
 
 @socketio.on('get_player_info')
 def handle_get_player_info():

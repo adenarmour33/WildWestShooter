@@ -375,7 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             <div class="admin-section">
                 <h3>Player Management</h3>
-                <select id="playerSelect">
+                <select id="playerList">
                     <option value="">Select Player</option>
                     ${Object.entries(gameState.players)
                         .filter(([id, player]) => !player.username.startsWith('bot_'))
@@ -386,6 +386,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 <button onclick="adminKillPlayer()">Kill Player</button>
                 <button onclick="adminKickPlayer()">Kick Player</button>
                 <button onclick="adminMutePlayer()">Mute Player</button>
+                <button onclick="adminToggleGodMode()">Toggle God Mode</button>
+                <button onclick="adminToggleModerator()">Toggle Moderator</button>
             </div>
         `;
 
@@ -405,23 +407,33 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Admin action functions
+    // Fix duplicate functions - keeping only one set of admin functions
+    function toggleAdminPanel() {
+        const adminPanel = document.querySelector('.admin-panel');
+        if (adminPanel) {
+            adminPanel.style.display = adminPanel.style.display === 'none' ? 'block' : 'none';
+            if (adminPanel.style.display === 'block') {
+                updatePlayerList();
+            }
+        }
+    }
+
     function adminKillPlayer() {
-        const playerId = document.getElementById('playerSelect').value;
-        if (!playerId) {
+        const playerSelect = document.querySelector('#playerList');
+        if (!playerSelect || !playerSelect.value) {
             alert('Please select a player');
             return;
         }
 
         socket.emit('admin_command', {
             command: 'kill',
-            target_id: playerId
+            target_id: playerSelect.value
         });
     }
 
     function adminKickPlayer() {
-        const playerId = document.getElementById('playerSelect').value;
-        if (!playerId) {
+        const playerSelect = document.querySelector('#playerList');
+        if (!playerSelect || !playerSelect.value) {
             alert('Please select a player');
             return;
         }
@@ -430,15 +442,41 @@ document.addEventListener('DOMContentLoaded', () => {
         if (reason) {
             socket.emit('admin_command', {
                 command: 'kick',
-                target_id: playerId,
+                target_id: playerSelect.value,
                 reason: reason
             });
         }
     }
 
+    function adminToggleGodMode() {
+        const playerSelect = document.querySelector('#playerList');
+        if (!playerSelect || !playerSelect.value) {
+            alert('Please select a player');
+            return;
+        }
+
+        socket.emit('admin_command', {
+            command: 'god_mode',
+            target_id: playerSelect.value
+        });
+    }
+
+    function adminToggleModerator() {
+        const playerSelect = document.querySelector('#playerList');
+        if (!playerSelect || !playerSelect.value) {
+            alert('Please select a player');
+            return;
+        }
+
+        socket.emit('admin_command', {
+            command: 'mod',
+            target_id: playerSelect.value
+        });
+    }
+
     function adminMutePlayer() {
-        const playerId = document.getElementById('playerSelect').value;
-        if (!playerId) {
+        const playerSelect = document.querySelector('#playerList');
+        if (!playerSelect || !playerSelect.value) {
             alert('Please select a player');
             return;
         }
@@ -447,11 +485,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (duration) {
             socket.emit('admin_command', {
                 command: 'mute',
-                target_id: playerId,
+                target_id: playerSelect.value,
                 duration: parseInt(duration)
             });
         }
     }
+
+    // Make sure these functions are globally accessible
+    window.adminKillPlayer = adminKillPlayer;
+    window.adminKickPlayer = adminKickPlayer;
+    window.adminToggleGodMode = adminToggleGodMode;
+    window.adminToggleModerator = adminToggleModerator;
+    window.adminMutePlayer = adminMutePlayer;
 
     // Map configuration
     const map = {
@@ -913,7 +958,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function updatePlayerList() {
-        const playerSelect = document.getElementById('playerSelect');
+        const playerSelect = document.getElementById('playerList');
         if (!playerSelect) return;
 
         playerSelect.innerHTML = '<option value="">Select Player</option>';
@@ -990,52 +1035,6 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Player died event received:', data);
         updateUI();
     });
-
-    // After socket initialization, add these functions for admin panel management
-    function toggleAdminPanel() {
-        const adminPanel = document.querySelector('.admin-panel');
-        if (adminPanel) {
-            adminPanel.style.display = adminPanel.style.display === 'none' ? 'block' : 'none';
-        }
-    }
-
-    // Add admin panel styles
-    const style = document.createElement('style');
-    style.textContent += `
-        .admin-panel {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.9);
-            padding: 20px;
-            border-radius: 10px;
-            z-index: 1001;
-            min-width: 300px;
-            max-width: 400px;
-            color: white;
-        }
-        .admin-panel select,
-        .admin-panel button {
-            width: 100%;
-            margin: 5px 0;
-            padding: 8px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            color: white;
-            border-radius: 4px;
-        }
-        .admin-panel button {
-            background: #4a9eff;
-            border: none;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        .admin-panel button:hover {
-            background: #357abd;
-        }
-    `;
-    document.head.appendChild(style);
 
     // Start the game loop
     requestAnimationFrame(gameLoop);

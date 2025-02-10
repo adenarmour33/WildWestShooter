@@ -18,15 +18,15 @@
         <!-- Admin Panel - Only show for admin users -->
         {% if not session.get('is_guest', False) and session.get('is_admin', False) %}
         <div class="admin-panel" style="display: none;">
+            <h2>Admin Panel</h2>
             <select id="playerList" class="form-select mb-2">
                 <option value="">Select Player</option>
             </select>
-            <button class="btn btn-danger mb-2 w-100" onclick="executeAdminCommand('kill')">Instant Kill</button>
-            <button class="btn btn-warning mb-2 w-100" onclick="executeAdminCommand('god')">Toggle God Mode</button>
-            <button class="btn btn-info mb-2 w-100" onclick="executeAdminCommand('mod')">Toggle Moderator</button>
-            <button class="btn btn-danger mb-2 w-100" onclick="executeAdminCommand('ban')">Ban Player</button>
-            <button class="btn btn-warning mb-2 w-100" onclick="executeAdminCommand('kick')">Kick Player</button>
-            <button class="btn btn-secondary mb-2 w-100" onclick="executeAdminCommand('mute')">Mute Player</button>
+            <button class="btn btn-danger mb-2 w-100" onclick="adminKillPlayer()">Instant Kill</button>
+            <button class="btn btn-warning mb-2 w-100" onclick="adminToggleGodMode()">Toggle God Mode</button>
+            <button class="btn btn-info mb-2 w-100" onclick="adminToggleModerator()">Toggle Moderator</button>
+            <button class="btn btn-danger mb-2 w-100" onclick="adminKickPlayer()">Kick Player</button>
+            <button class="btn btn-warning mb-2 w-100" onclick="adminMutePlayer()">Mute Player</button>
         </div>
         {% endif %}
 

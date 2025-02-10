@@ -419,7 +419,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Update shoot function to properly set bullet damage
+    // Update shoot function to properly handle damage
     function shoot() {
         const now = Date.now();
         const weapon = WEAPONS[player.currentWeapon];
@@ -751,7 +751,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     window.addEventListener('resize', resizeCanvas);
-
 
     // Chat UI creation
     function createChatUI() {
@@ -1146,8 +1145,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Update socket.on handlers to properly handle damage
     socket.on('player_hit', (data) => {
+        console.log('Hit received:', data);
         if (player.health > 0) {
             player.health = Math.max(0, player.health - data.damage);
+            createHitEffect(player.x + PLAYER_SIZE / 2, player.y + PLAYER_SIZE / 2);
             updateUI();
         }
     });
@@ -1157,24 +1158,18 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function checkBulletCollisions() {
-    const PLAYER_HITBOX = 24; // Slightly smaller hitbox for better hit detection
+    const PLAYER_HITBOX = 24;
 
     gameState.bullets = gameState.bullets.filter(bullet => {
-        // Check bullet lifetime
-        if (Date.now() - bullet.created_at > 2000) {
-            return false;
-        }
+        if (Date.now() - bullet.created_at > 2000) return false;
 
-        // Check collision with current player
         if (bullet.shooter !== socket.id && player.health > 0) {
             const dx = player.x + PLAYER_SIZE / 2 - bullet.x;
             const dy = player.y + PLAYER_SIZE / 2 - bullet.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
 
             if (distance < PLAYER_HITBOX) {
-                // Add hit effect
                 createHitEffect(bullet.x, bullet.y);
-
                 socket.emit('player_hit', {
                     damage: bullet.damage,
                     shooter: bullet.shooter,
@@ -1184,7 +1179,6 @@ function checkBulletCollisions() {
             }
         }
 
-        // Check collision with other players
         for (const [id, otherPlayer] of Object.entries(gameState.players)) {
             if (id === bullet.shooter || otherPlayer.health <= 0 || id === socket.id) continue;
 
@@ -1193,9 +1187,7 @@ function checkBulletCollisions() {
             const distance = Math.sqrt(dx * dx + dy * dy);
 
             if (distance < PLAYER_HITBOX) {
-                // Add hit effect
                 createHitEffect(bullet.x, bullet.y);
-
                 socket.emit('player_hit', {
                     damage: bullet.damage,
                     shooter: bullet.shooter,
@@ -1205,12 +1197,10 @@ function checkBulletCollisions() {
             }
         }
 
-        // Update bullet position
         bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
         bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
 
-        // Keep bullet in bounds
-        return bullet.x >= 0 && bullet.x <= map.width * tileSize &&
+        return bullet.x >= 0 && bullet.x <= map.width * tileSize && 
                bullet.y >= 0 && bullet.y <= map.height * tileSize;
     });
 }

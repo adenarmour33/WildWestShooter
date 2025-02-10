@@ -103,20 +103,22 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('resize', resizeCanvas);
     resizeCanvas(); // Initial resize
 
-    // Create chat UI function
+    // Chat UI creation
     function createChatUI() {
         const chatContainer = document.createElement('div');
         chatContainer.className = 'chat-container';
         chatContainer.innerHTML = `
             <div class="chat-messages"></div>
             <div class="chat-input-container">
-                <input type="text" class="chat-input" placeholder="Press Enter to chat...">
+                <input type="text" class="chat-input" placeholder="Type your message...">
+                <button class="chat-send-button">Send</button>
             </div>
         `;
         document.body.appendChild(chatContainer);
 
         const chatInput = chatContainer.querySelector('.chat-input');
         const chatMessages = chatContainer.querySelector('.chat-messages');
+        const sendButton = chatContainer.querySelector('.chat-send-button');
 
         // Add chat styles
         const style = document.createElement('style');
@@ -142,14 +144,28 @@ document.addEventListener('DOMContentLoaded', () => {
             .chat-input-container {
                 padding: 10px;
                 border-top: 1px solid rgba(255, 255, 255, 0.1);
+                display: flex;
+                gap: 8px;
             }
             .chat-input {
-                width: 100%;
+                flex: 1;
                 background: rgba(255, 255, 255, 0.1);
                 border: none;
-                padding: 5px 10px;
+                padding: 8px;
                 color: white;
-                border-radius: 3px;
+                border-radius: 4px;
+            }
+            .chat-send-button {
+                background: #4a9eff;
+                border: none;
+                color: white;
+                padding: 8px 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: background 0.3s;
+            }
+            .chat-send-button:hover {
+                background: #357abd;
             }
             .chat-message {
                 margin-bottom: 5px;
@@ -167,6 +183,25 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         `;
         document.head.appendChild(style);
+
+        // Function to send chat message
+        function sendChatMessage() {
+            const message = chatInput.value.trim();
+            if (message) {
+                socket.emit('chat_message', { message: message });
+                chatInput.value = '';
+            }
+        }
+
+        // Add click handler for send button
+        sendButton.addEventListener('click', sendChatMessage);
+
+        // Keep Enter key functionality as well
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendChatMessage();
+            }
+        });
 
         return { chatMessages, chatInput };
     }
@@ -878,7 +913,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!playerSelect) return;
 
         playerSelect.innerHTML = '<option value="">Select Player</option>';
-        Object.entries(gameState.players).forEach(([id, player]) => {
+                Object.entries(gameState.players).forEach(([id, player]) => {
             if (id !== gameState.userId && !player.username.startsWith('bot_')) {  // Don't include self or bots
                 const option = document.createElement('option');
                 option.value = id;
@@ -911,16 +946,8 @@ document.addEventListener('DOMContentLoaded', () => {
         chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
     });
 
-    // Update chat input handling
-    const chatInput = document.querySelector('.chat-input');
-    if (chatInput) {
-        chatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && chatInput.value.trim()) {
-                socket.emit('chat_message', { message: chatInput.value.trim() });
-                chatInput.value = '';
-            }
-        });
-    }
+
+    // Update chat input handling - removed the old listener, now handled in createChatUI()
 
     // Update socket events for admin commands
     socket.on('admin_command_result', (data) => {

@@ -590,10 +590,34 @@ document.addEventListener('DOMContentLoaded', () => {
         player.x = Math.max(0, Math.min(map.width * tileSize - PLAYER_SIZE, player.x));
         player.y = Math.max(0, Math.min(map.height * tileSize - PLAYER_SIZE, player.y));
 
-        // Update bullets with deltaTime
+        // Update bullet positions and check collisions
+        gameState.bullets = gameState.bullets.filter(bullet => {
+            // Move bullet
+            bullet.x += Math.cos(bullet.angle) * BULLET_SPEED * timeScale;
+            bullet.y += Math.sin(bullet.angle) * BULLET_SPEED * timeScale;
+
+            // Check if bullet is still active (within bounds and lifetime)
+            const isActive = bullet.x >= 0 && 
+                           bullet.x <= map.width * tileSize && 
+                           bullet.y >= 0 && 
+                           bullet.y <= map.height * tileSize &&
+                           Date.now() - bullet.created_at < 2000;
+
+            return isActive;
+        });
+
+        // Update local bullets (not yet synced with server)
         gameState.localBullets = gameState.localBullets.filter(bullet => {
-            bullet.update(deltaTime);
-            return bullet.active;
+            bullet.x += Math.cos(bullet.angle) * BULLET_SPEED * timeScale;
+            bullet.y += Math.sin(bullet.angle) * BULLET_SPEED * timeScale;
+
+            const isActive = bullet.x >= 0 && 
+                           bullet.x <= map.width * tileSize && 
+                           bullet.y >= 0 && 
+                           bullet.y <= map.height * tileSize &&
+                           Date.now() - bullet.created_at < 2000;
+
+            return isActive;
         });
 
         // Check bullet collisions
@@ -883,7 +907,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 min-width: 300px;
             }
             .command-input::placeholder {
-                color: rgba(255, 255, 255, 0.5);
+                color: rgba(255,255, 255, 0.5);
             }
             .admin-panel {
                 position: fixed;
@@ -1133,78 +1157,6 @@ document.addEventListener('DOMContentLoaded', () => {
     requestAnimationFrame(gameLoop);
 });
 
-class Bullet {
-    constructor(x, y, angle, speed, damage, weapon, shooter) {
-        this.x = x;
-        this.y = y;
-        this.angle = angle;
-        this.speed = speed;
-        this.damage = damage;
-        this.weapon = weapon;
-        this.shooter = shooter;
-        this.lifetime = 2000;
-        this.spawnTime = Date.now();
-        this.active = true;
-    }
-
-    update(deltaTime) {
-        if (!this.active) return;
-
-        // Update position with delta time
-        const movement = this.speed * (deltaTime / 16.67);
-        this.x += Math.cos(this.angle) * movement;
-        this.y += Math.sin(this.angle) * movement;
-
-        // Check map bounds
-        const mapWidth = 50 * tileSize;
-        const mapHeight = 50 * tileSize;
-        if (this.x < 0 || this.x > mapWidth || this.y < 0 || this.y > mapHeight) {
-            this.active = false;
-        }
-
-        // Check lifetime
-        if (Date.now() - this.spawnTime > this.lifetime) {
-            this.active = false;
-        }
-    }
-}
-
-let joystick = {
-    base: document.getElementById('joystickBase'),
-    stick: document.getElementById('joystickStick'),
-    active: false,
-    baseX: 0,
-    baseY: 0,
-    deltaX: 0,
-    deltaY: 0
-};
-
-// Update the bullet drawing function
-function drawBullet(bullet) {
-    if (!bullet.active) return;
-    const screenX = bullet.x - camera.x;
-    const screenY = bullet.y - camera.y;
-
-    ctx.save();
-    ctx.translate(screenX, screenY);
-    ctx.rotate(bullet.angle);
-
-    // Make bullets more visible with glow effect
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = '#ffff00';
-
-    // Larger, more visible bullet
-    ctx.fillStyle = '#fff700';
-    ctx.fillRect(-6, -3, 12, 6);
-
-    // Add bright center
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(-4, -2, 8, 4);
-
-    ctx.restore();
-}
-
-// Update bullet collision detection
 function checkBulletCollisions() {
     const PLAYER_HITBOX = 24; // Slightly smaller hitbox for better hit detection
 
@@ -1264,7 +1216,6 @@ function checkBulletCollisions() {
     });
 }
 
-// Add hit effect function
 function createHitEffect(x, y) {
     const particles = [];
     for (let i = 0; i < 8; i++) {
@@ -1299,4 +1250,38 @@ function createHitEffect(x, y) {
     }
 
     updateParticles();
+}
+
+let joystick = {
+    base: document.getElementById('joystickBase'),
+    stick: document.getElementById('joystickStick'),
+    active: false,
+    baseX: 0,
+    baseY: 0,
+    deltaX: 0,
+    deltaY: 0
+};
+
+function drawBullet(bullet) {
+    if (!bullet.active) return;
+    const screenX = bullet.x - camera.x;
+    const screenY = bullet.y - camera.y;
+
+    ctx.save();
+    ctx.translate(screenX, screenY);
+    ctx.rotate(bullet.angle);
+
+    // Make bullets more visible with glow effect
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#ffff00';
+
+    // Larger, more visible bullet
+    ctx.fillStyle = '#fff700';
+    ctx.fillRect(-6, -3, 12, 6);
+
+    // Add bright center
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(-4, -2, 8, 4);
+
+    ctx.restore();
 }

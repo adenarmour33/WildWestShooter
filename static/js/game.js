@@ -272,12 +272,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         playerSelect.innerHTML = '<option value="">Select Player</option>';
         Object.entries(gameState.players).forEach(([id, player]) => {
-            if (id !== gameState.userId && !player.username.startsWith('bot_')) {
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = player.username;
-                playerSelect.appendChild(option);
-            }
+            // Skip current user and bots
+            if (id === socket.id) return;
+
+            const option = document.createElement('option');
+            option.value = id;
+            option.textContent = player.username;
+            playerSelect.appendChild(option);
         });
     }
 
@@ -311,7 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const minimapCtx = minimapElement ? minimapElement.getContext('2d') : null;
 
     window.addEventListener('resize', resizeCanvas);
-    
+
 
     const keys = {};
     let mouseX = 0, mouseY = 0;
@@ -672,7 +673,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     window.addEventListener('resize', resizeCanvas);
-    
+
 
     // Chat UI creation
     function createChatUI() {

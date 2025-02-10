@@ -500,15 +500,22 @@ def handle_player_hit(data):
             if target_id and target_id in game_rooms[room].players:
                 target = game_rooms[room].players[target_id]
 
-                target_user_id = player_states[target_id]['user_id']
-                if not target_user_id.startswith('guest_'):
-                    user = User.query.get(target_user_id)
-                    if user and user.god_mode:
-                        return
+                # Check if target is a bot
+                if target_id.startswith('bot_'):
+                    # Bots don't have god mode, directly apply damage
+                    damage = data.get('damage', 15)
+                    target['health'] = max(0, target['health'] - damage)
+                else:
+                    # Handle regular players
+                    target_user_id = player_states[target_id]['user_id']
+                    if not target_user_id.startswith('guest_'):
+                        user = User.query.get(target_user_id)
+                        if user and user.god_mode:
+                            return
 
-                damage = data.get('damage', 15)
-                target['health'] = max(0, target['health'] - damage)
-                emit('player_hit', {'damage': damage}, room=target_id)
+                    damage = data.get('damage', 15)
+                    target['health'] = max(0, target['health'] - damage)
+                    emit('player_hit', {'damage': damage}, room=target_id)
 
                 if target['health'] <= 0:
                     shooter = data.get('shooter')
@@ -520,10 +527,11 @@ def handle_player_hit(data):
 
                     spawn = game_rooms[room].respawn_player(target_id)
                     if spawn:
-                        emit('player_respawn', {
-                            'x': spawn['x'],
-                            'y': spawn['y']
-                        }, room=target_id)
+                        if not target_id.startswith('bot_'):  # Only emit respawn for real players
+                            emit('player_respawn', {
+                                'x': spawn['x'],
+                                'y': spawn['y']
+                            }, room=target_id)
 
                 emit('game_state', {
                     'players': game_rooms[room].players,

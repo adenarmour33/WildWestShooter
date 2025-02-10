@@ -20,12 +20,12 @@ let gameState = {
     adminIds: new Set()
 };
 
-// Update weapon damage values to be more impactful
+// Update weapon damage values to be less powerful
 const WEAPONS = {
-    pistol: { damage: 25, fireRate: 400, spread: 0.1, ammo: 30, maxAmmo: 30 },
-    shotgun: { damage: 15, fireRate: 800, spread: 0.3, pellets: 5, ammo: 10, maxAmmo: 10 },
-    smg: { damage: 15, fireRate: 150, spread: 0.15, ammo: 45, maxAmmo: 45 },
-    knife: { damage: 50, fireRate: 500, range: 50 }
+    pistol: { damage: 10, fireRate: 400, spread: 0.1, ammo: 30, maxAmmo: 30 },
+    shotgun: { damage: 10, fireRate: 800, spread: 0.3, pellets: 5, ammo: 10, maxAmmo: 10 },
+    smg: { damage: 10, fireRate: 150, spread: 0.15, ammo: 45, maxAmmo: 45 },
+    knife: { damage: 10, fireRate: 500, range: 50 }
 };
 
 // Game constants

@@ -912,12 +912,12 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUI();
     });
 
-    functionupdatePlayerList() {
+    function updatePlayerList() {
         const playerSelect = document.getElementById('playerSelect');
         if (!playerSelect) return;
 
         playerSelect.innerHTML = '<option value="">Select Player</option>';
-                Object.entries(gameState.players).forEach(([id, player]) => {
+        Object.entries(gameState.players).forEach(([id, player]) => {
             if (id !== gameState.userId && !player.username.startsWith('bot_')) {  // Don't include self or bots
                 const option = document.createElement('option');
                 option.value = id;

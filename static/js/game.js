@@ -268,7 +268,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 border-radius: 10px;
                 z-index: 1001;
                 color: white;
-                min-width: 400px;
+                min-width: 300px;
+                max-width: 400px;
             }
             .admin-panel h2 {
                 margin: 0 0 15px 0;
@@ -520,6 +521,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if(e.key.toLowerCase() === 'r') {
             reload();
+        }
+        // Add admin panel toggle
+        if(e.key === "'") {
+            toggleAdminPanel();
         }
     });
 
@@ -898,7 +903,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-
     socket.on('game_state', (state) => {
         console.log('Received game state:', state);
         gameState.players = state.players || {};
@@ -908,7 +912,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateUI();
     });
 
-    function updatePlayerList() {
+    functionupdatePlayerList() {
         const playerSelect = document.getElementById('playerSelect');
         if (!playerSelect) return;
 
@@ -946,8 +950,6 @@ document.addEventListener('DOMContentLoaded', () => {
         chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
     });
 
-
-    // Update chat input handling - removed the old listener, now handled in createChatUI()
 
     // Update socket events for admin commands
     socket.on('admin_command_result', (data) => {
@@ -988,6 +990,52 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Player died event received:', data);
         updateUI();
     });
+
+    // After socket initialization, add these functions for admin panel management
+    function toggleAdminPanel() {
+        const adminPanel = document.querySelector('.admin-panel');
+        if (adminPanel) {
+            adminPanel.style.display = adminPanel.style.display === 'none' ? 'block' : 'none';
+        }
+    }
+
+    // Add admin panel styles
+    const style = document.createElement('style');
+    style.textContent += `
+        .admin-panel {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1001;
+            min-width: 300px;
+            max-width: 400px;
+            color: white;
+        }
+        .admin-panel select,
+        .admin-panel button {
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 4px;
+        }
+        .admin-panel button {
+            background: #4a9eff;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .admin-panel button:hover {
+            background: #357abd;
+        }
+    `;
+    document.head.appendChild(style);
 
     // Start the game loop
     requestAnimationFrame(gameLoop);

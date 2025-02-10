@@ -7,7 +7,22 @@ const NETWORK_UPDATE_INTERVAL = 50; // Send updates every 50ms
 let lastNetworkUpdate = 0;
 let camera = null; // Initialize as null first
 
-// Initialize gameState globally
+// Update weapon damage values to be less powerful
+const WEAPONS = {
+    pistol: { damage: 10, fireRate: 400, spread: 0.1, ammo: 30, maxAmmo: 30 },
+    shotgun: { damage: 10, fireRate: 800, spread: 0.3, pellets: 5, ammo: 10, maxAmmo: 10 },
+    smg: { damage: 10, fireRate: 150, spread: 0.15, ammo: 45, maxAmmo: 45 },
+    knife: { damage: 10, fireRate: 500, range: 50 }
+};
+
+// Add after the WEAPONS constant
+const POWERUPS = {
+    speed: { duration: 10000, multiplier: 1.5, respawnTime: 30000 },
+    shield: { duration: 8000, respawnTime: 45000 },
+    damage: { duration: 15000, multiplier: 2, respawnTime: 60000 }
+};
+
+// Update gameState object to include powerups
 let gameState = {
     players: {},
     bullets: [],
@@ -17,15 +32,9 @@ let gameState = {
     isModerator: false,
     chatMessages: [],
     userId: null,
-    adminIds: new Set()
-};
-
-// Update weapon damage values to be less powerful
-const WEAPONS = {
-    pistol: { damage: 10, fireRate: 400, spread: 0.1, ammo: 30, maxAmmo: 30 },
-    shotgun: { damage: 10, fireRate: 800, spread: 0.3, pellets: 5, ammo: 10, maxAmmo: 10 },
-    smg: { damage: 10, fireRate: 150, spread: 0.15, ammo: 45, maxAmmo: 45 },
-    knife: { damage: 10, fireRate: 500, range: 50 }
+    adminIds: new Set(),
+    powerups: [], // Add powerups array to track spawned powerups
+    activePowerups: {} // Track active powerups for the local player
 };
 
 // Game constants
@@ -84,6 +93,18 @@ assets.weapons.shotgun.src = '/static/assets/weapons/shotgun.svg';
 assets.weapons.smg.src = '/static/assets/weapons/smg.svg';
 assets.weapons.knife.src = '/static/assets/weapons/knife.svg';
 
+
+// Add after assets loading section
+assets.powerups = {
+    speed: new Image(),
+    shield: new Image(),
+    damage: new Image()
+};
+
+// Add powerup asset loading
+assets.powerups.speed.src = '/static/assets/powerups/speed.svg';
+assets.powerups.shield.src = '/static/assets/powerups/shield.svg';
+assets.powerups.damage.src = '/static/assets/powerups/damage.svg';
 
 function resizeCanvas() {
     if (!canvas || !camera) return; // Add null check
@@ -372,7 +393,10 @@ document.addEventListener('DOMContentLoaded', () => {
         kills: 0,
         deaths: 0,
         currentWeapon: 'pistol',
-        lastShot: 0
+        lastShot: 0,
+        speedMultiplier: 1,
+        damageMultiplier: 1,
+        isInvulnerable: false
     };
 
 
@@ -470,7 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     x: bulletX,
                     y: bulletY,
                     angle: angle,
-                    damage: weapon.damage,
+                    damage: weapon.damage * player.damageMultiplier, // Apply damage multiplier
                     shooter: socket.id,
                     weapon: player.currentWeapon,
                     created_at: Date.now()
@@ -482,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     x: bulletX,
                     y: bulletY,
                     angle: angle,
-                    damage: weapon.damage,
+                    damage: weapon.damage * player.damageMultiplier, // Apply damage multiplier
                     weapon: player.currentWeapon
                 });
             }
@@ -539,7 +563,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Skip if:
                 // - Target is the shooter
                 // - Target is already dead
-                if (id === bullet.shooter || targetPlayer.health <= 0) continue;
+                // - Target is invulnerable (due to shield powerup)
+                if (id === bullet.shooter || targetPlayer.health <= 0 || targetPlayer.isInvulnerable) continue;
 
                 const dx = targetPlayer.x + PLAYER_SIZE / 2 - bullet.x;
                 const dy = targetPlayer.y + PLAYER_SIZE / 2 - bullet.y;
@@ -573,7 +598,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Check collision with local player
-            if (bullet.shooter !== socket.id && player.health > 0) {
+            if (bullet.shooter !== socket.id && player.health > 0 && !player.isInvulnerable) {
                 const dx = player.x + PLAYER_SIZE / 2 - bullet.x;
                 const dy = player.y + PLAYER_SIZE / 2 - bullet.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
@@ -617,14 +642,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function update(deltaTime) {
         if (player.health <= 0) return;
 
-        // Update player movement
+        // Update player movement with speed multiplier
         player.velX = 0;
         player.velY = 0;
 
-        if (keys['w']) player.velY = -PLAYER_SPEED;
-        if (keys['s']) player.velY = PLAYER_SPEED;
-        if (keys['a']) player.velX = -PLAYER_SPEED;
-        if (keys['d']) player.velX = PLAYER_SPEED;
+        if (keys['w']) player.velY = -PLAYER_SPEED * player.speedMultiplier;
+        if (keys['s']) player.velY = PLAYER_SPEED * player.speedMultiplier;
+        if (keys['a']) player.velX = -PLAYER_SPEED * player.speedMultiplier;
+        if (keys['d']) player.velX = PLAYER_SPEED * player.speedMultiplier;
 
         // Normalize diagonal movement
         if (player.velX !== 0 && player.velY !== 0) {
@@ -778,6 +803,34 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.drawImage(assets.player, -PLAYER_SIZE / 2, -PLAYER_SIZE / 2, PLAYER_SIZE, PLAYER_SIZE);
             ctx.restore();
         }
+
+        // Draw powerups
+        gameState.powerups.forEach(powerup => {
+            const screenX = powerup.x - camera.x;
+            const screenY = powerup.y - camera.y;
+
+            if (assets.powerups[powerup.type].complete) {
+                ctx.drawImage(assets.powerups[powerup.type], screenX, screenY, 32, 32);
+            }
+        });
+
+        // Draw power-up status indicators
+        if (Object.keys(gameState.activePowerups).length > 0) {
+            const padding = 10;
+            const size = 30;
+            let offsetX = padding;
+
+            Object.entries(gameState.activePowerups).forEach(([type, data]) => {
+                const timeLeft = (POWERUPS[type].duration - (Date.now() - data.activatedAt)) / 1000;
+                if (timeLeft > 0) {
+                    ctx.drawImage(assets.powerups[type], offsetX, padding, size, size);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '12px Arial';
+                    ctx.fillText(Math.ceil(timeLeft) + 's', offsetX + size / 4, padding + size + 15);
+                    offsetX += size + padding;
+                }
+            });
+        }
     }
 
     function updateMinimap() {
@@ -800,8 +853,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-
-    window.addEventListener('resize', resizeCanvas);
 
     // Chat UI creation
     function createChatUI() {
@@ -1250,7 +1301,8 @@ function checkBulletCollisions() {
             // Skip if:
             // - Target is the shooter
             // - Target is already dead
-            if (id === bullet.shooter || targetPlayer.health <= 0) continue;
+            // - Target is invulnerable (due to shield powerup)
+            if (id === bullet.shooter || targetPlayer.health <= 0 || targetPlayer.isInvulnerable) continue;
 
             const dx = targetPlayer.x + PLAYER_SIZE / 2 - bullet.x;
             const dy = targetPlayer.y + PLAYER_SIZE / 2 - bullet.y;
@@ -1284,7 +1336,7 @@ function checkBulletCollisions() {
         }
 
         // Check collision with local player
-        if (bullet.shooter !== socket.id && player.health > 0) {
+        if (bullet.shooter !== socket.id && player.health > 0 && !player.isInvulnerable) {
             const dx = player.x + PLAYER_SIZE / 2 - bullet.x;
             const dy = player.y + PLAYER_SIZE / 2 - bullet.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
@@ -1393,3 +1445,89 @@ function drawBullet(bullet) {
 
     ctx.restore();
 }
+
+// Add powerup spawning function after the createChatUI function
+function spawnPowerup() {
+    const types = ['speed', 'shield', 'damage'];
+    const type = types[Math.floor(Math.random() * types.length)];
+    const powerup = {
+        type: type,
+        x: Math.random() * (map.width * tileSize - 32),
+        y: Math.random() * (map.height * tileSize - 32),
+        createdAt: Date.now()
+    };
+    gameState.powerups.push(powerup);
+    return powerup;
+}
+
+// Add powerup collection check in the update function
+function checkPowerupCollisions() {
+    const PICKUP_RADIUS = 20;
+    gameState.powerups = gameState.powerups.filter(powerup => {
+        const dx = player.x + PLAYER_SIZE / 2 - (powerup.x + 16);
+        const dy = player.y + PLAYER_SIZE / 2 - (powerup.y + 16);
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        if (distance < PICKUP_RADIUS) {
+            activatePowerup(powerup.type);
+            return false;
+        }
+        return true;
+    });
+}
+
+// Add powerup activation function
+function activatePowerup(type) {
+    const powerup = POWERUPS[type];
+    const now = Date.now();
+
+    // Deactivate existing powerup of same type if active
+    if (gameState.activePowerups[type]) {
+        clearTimeout(gameState.activePowerups[type].timeoutId);
+    }
+
+    // Apply powerup effect
+    switch (type) {
+        case 'speed':
+            player.speedMultiplier = powerup.multiplier;
+            break;
+        case 'shield':
+            player.isInvulnerable = true;
+            break;
+        case 'damage':
+            player.damageMultiplier = powerup.multiplier;
+            break;
+    }
+
+    // Set deactivation timeout
+    const timeoutId = setTimeout(() => {
+        deactivatePowerup(type);
+    }, powerup.duration);
+
+    gameState.activePowerups[type] = {
+        activatedAt: now,
+        timeoutId: timeoutId
+    };
+
+    // Schedule next powerup spawn
+    setTimeout(spawnPowerup, powerup.respawnTime);
+}
+
+// Add powerup deactivation function
+function deactivatePowerup(type) {
+    switch (type) {
+        case 'speed':
+            player.speedMultiplier = 1;
+            break;
+        case 'shield':
+            player.isInvulnerable = false;
+            break;
+        case 'damage':
+            player.damageMultiplier = 1;
+            break;
+    }
+    delete gameState.activePowerups[type];
+}
+
+// Initialize first powerup spawn when game starts
+setTimeout(spawnPowerup, 5000);

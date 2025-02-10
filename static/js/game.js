@@ -149,144 +149,126 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupAdminPanel() {
         console.log('Setting up admin panel');
 
-        // Add event listener for admin panel toggle
+        // Create admin panel if it doesn't exist
+        let adminPanel = document.querySelector('.admin-panel');
+        if (!adminPanel) {
+            adminPanel = document.createElement('div');
+            adminPanel.className = 'admin-panel';
+            adminPanel.style.display = 'none';
+            adminPanel.innerHTML = `
+                <h2>Admin Panel</h2>
+                <div class="admin-section">
+                    <h3>Player Management</h3>
+                    <select id="playerList">
+                        <option value="">Select Player</option>
+                    </select>
+                    <button id="killButton">Kill Player</button>
+                    <button id="godModeButton">Toggle God Mode</button>
+                    <button id="modButton">Toggle Moderator</button>
+                    <button id="kickButton">Kick Player</button>
+                    <button id="muteButton">Mute Player</button>
+                </div>
+            `;
+            document.body.appendChild(adminPanel);
+        }
+
+        // Remove existing event listeners
+        const oldPanel = document.querySelector('.admin-panel');
+        if (oldPanel) {
+            const clone = oldPanel.cloneNode(true);
+            oldPanel.parentNode.replaceChild(clone, oldPanel);
+            adminPanel = clone;
+        }
+
+        // Setup panel toggle
         document.addEventListener('keydown', (e) => {
             if (e.key === "'") {
                 e.preventDefault();
-                const adminPanel = document.querySelector('.admin-panel');
-                if (adminPanel) {
-                    console.log('Toggling admin panel');
-                    adminPanel.style.display = adminPanel.style.display === 'none' ? 'block' : 'none';
-                    if (adminPanel.style.display === 'block') {
-                        updatePlayerList();
-                    }
+                adminPanel.style.display = adminPanel.style.display === 'none' ? 'block' : 'none';
+                if (adminPanel.style.display === 'block') {
+                    updatePlayerList();
                 }
             }
         });
 
-        // Setup button event listeners
-        const killButton = document.getElementById('killButton');
-        const godModeButton = document.getElementById('godModeButton');
-        const modButton = document.getElementById('modButton');
-        const kickButton = document.getElementById('kickButton');
-        const muteButton = document.getElementById('muteButton');
+        // Setup button handlers
+        const setupButton = (id, command, promptText = null, extraData = null) => {
+            const button = adminPanel.querySelector(`#${id}`);
+            if (button) {
+                button.addEventListener('click', () => {
+                    const playerSelect = adminPanel.querySelector('#playerList');
+                    if (!playerSelect || !playerSelect.value) {
+                        alert('Please select a player first');
+                        return;
+                    }
 
-        if (killButton) {
-            killButton.addEventListener('click', () => {
-                const playerSelect = document.getElementById('playerList');
-                if (!playerSelect || !playerSelect.value) {
-                    alert('Please select a player');
-                    return;
-                }
-                console.log('Kill command for player:', playerSelect.value);
-                socket.emit('admin_command', {
-                    command: 'kill',
-                    target_id: playerSelect.value
+                    let data = {
+                        command: command,
+                        target_id: playerSelect.value
+                    };
+
+                    if (promptText) {
+                        const input = prompt(promptText);
+                        if (!input) return;
+                        if (extraData) {
+                            data[extraData] = input;
+                        }
+                    }
+
+                    console.log(`Sending admin command: ${command}`, data);
+                    socket.emit('admin_command', data);
                 });
-            });
-        }
+            }
+        };
 
-        if (godModeButton) {
-            godModeButton.addEventListener('click', () => {
-                const playerSelect = document.getElementById('playerList');
-                if (!playerSelect || !playerSelect.value) {
-                    alert('Please select a player');
-                    return;
-                }
-                console.log('God mode toggle for player:', playerSelect.value);
-                socket.emit('admin_command', {
-                    command: 'god_mode',
-                    target_id: playerSelect.value
-                });
-            });
-        }
+        // Setup each button with proper handlers
+        setupButton('killButton', 'kill');
+        setupButton('godModeButton', 'god_mode');
+        setupButton('modButton', 'mod');
+        setupButton('kickButton', 'kick', 'Enter kick reason:', 'reason');
+        setupButton('muteButton', 'mute', 'Enter mute duration (minutes):', 'duration');
 
-        if (modButton) {
-            modButton.addEventListener('click', () => {
-                const playerSelect = document.getElementById('playerList');
-                if (!playerSelect || !playerSelect.value) {
-                    alert('Please select a player');
-                    return;
-                }
-                console.log('Moderator toggle for player:', playerSelect.value);
-                socket.emit('admin_command', {
-                    command: 'mod',
-                    target_id: playerSelect.value
-                });
-            });
-        }
-
-        if (kickButton) {
-            kickButton.addEventListener('click', () => {
-                const playerSelect = document.getElementById('playerList');
-                if (!playerSelect || !playerSelect.value) {
-                    alert('Please select a player');
-                    return;
-                }
-                const reason = prompt('Enter kick reason:');
-                if (reason) {
-                    console.log('Kick command for player:', playerSelect.value);
-                    socket.emit('admin_command', {
-                        command: 'kick',
-                        target_id: playerSelect.value,
-                        reason: reason
-                    });
-                }
-            });
-        }
-
-        if (muteButton) {
-            muteButton.addEventListener('click', () => {
-                const playerSelect = document.getElementById('playerList');
-                if (!playerSelect || !playerSelect.value) {
-                    alert('Please select a player');
-                    return;
-                }
-                const duration = prompt('Enter mute duration (minutes):', '5');
-                if (duration) {
-                    console.log('Mute command for player:', playerSelect.value);
-                    socket.emit('admin_command', {
-                        command: 'mute',
-                        target_id: playerSelect.value,
-                        duration: parseInt(duration)
-                    });
-                }
-            });
-        }
-
-        // Handle admin command responses
+        // Handle command responses
         socket.on('admin_command_result', (data) => {
             console.log('Admin command result:', data);
             if (data.success) {
-                alert('Command executed successfully: ' + data.message);
-                updatePlayerList(); // Refresh the player list after successful command
+                alert(data.message || 'Command executed successfully');
+                updatePlayerList();
             } else {
-                alert('Command failed: ' + data.error);
+                alert(data.error || 'Command failed');
             }
         });
+
+        // Initial player list update
+        updatePlayerList();
     }
 
     function updatePlayerList() {
         const playerSelect = document.getElementById('playerList');
         if (!playerSelect) return;
 
-        playerSelect.innerHTML = '<option value="">Select Player</option>';
-        Object.entries(gameState.players).forEach(([id, player]) => {
-            // Skip current user and bots
-            if (id === socket.id) return;
+        // Store current selection
+        const currentSelection = playerSelect.value;
 
-            const option = document.createElement('option');
-            option.value = id;
-            option.textContent = player.username;
-            playerSelect.appendChild(option);
+        // Clear and rebuild list
+        playerSelect.innerHTML = '<option value="">Select Player</option>';
+
+        // Add all players except current user
+        Object.entries(gameState.players).forEach(([id, player]) => {
+            if (id !== socket.id) {  // Exclude current player
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = `${player.username}${id.startsWith('bot_') ? ' (Bot)' : ''}`;
+                playerSelect.appendChild(option);
+            }
         });
+
+        // Restore previous selection if player still exists
+        if (currentSelection && gameState.players[currentSelection]) {
+            playerSelect.value = currentSelection;
+        }
     }
 
-    // Asset loading (duplicate removed)
-
-    // Game constants (duplicate removed)
-
-    // Map configuration (duplicate removed)
     let player = {
         x: Math.random() * (map.width * tileSize - PLAYER_SIZE),
         y: Math.random() * (map.height * tileSize - PLAYER_SIZE),
@@ -1028,9 +1010,9 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('admin_command_result', (data) => {
         console.log('Admin command result:', data);
         if (data.success) {
-            alert('Command executed successfully: ' + data.message);
+            alert(data.message || 'Command executed successfully');
         } else {
-            alert('Command failed: ' + data.error);
+            alert(data.error || 'Command failed');
         }
     });
 

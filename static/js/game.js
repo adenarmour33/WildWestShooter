@@ -301,12 +301,32 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
-        // Setup buttons
-        setupButton('killButton', 'kill');
-        setupButton('godModeButton', 'god_mode');
-        setupButton('modButton', 'mod');
-        setupButton('kickButton', 'kick', 'Enter kick reason:', 'reason');
-        setupButton('muteButton', 'mute', 'Enter mute duration (minutes):', 'duration');
+        // Wait for player list to be populated
+        setTimeout(() => {
+            // Setup buttons
+            setupButton('killButton', 'kill');
+            setupButton('godModeButton', 'god_mode');
+            setupButton('modButton', 'mod');
+            setupButton('kickButton', 'kick', 'Enter kick reason:', 'reason');
+            setupButton('muteButton', 'mute', 'Enter mute duration (minutes):', 'duration');
+
+            // Update player list initially
+            socket.emit('get_player_info');
+        }, 1000);
+
+        // Listen for player info updates
+        socket.on('player_info', (data) => {
+            const playerList = document.querySelector('#playerList');
+            if (!playerList) return;
+
+            playerList.innerHTML = '<option value="">Select Player</option>';
+            data.players.forEach(player => {
+                const option = document.createElement('option');
+                option.value = player.id;
+                option.textContent = `${player.username} (${player.health}HP)`;
+                playerList.appendChild(option);
+            });
+        });
 
         // Handle command responses
         socket.on('admin_command_result', (data) => {

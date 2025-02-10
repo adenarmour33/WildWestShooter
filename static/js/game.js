@@ -22,7 +22,14 @@ const POWERUPS = {
     damage: { duration: 15000, multiplier: 2, respawnTime: 60000 }
 };
 
-// Update gameState object to include powerups
+// Add after the POWERUPS constant
+const WEATHER = {
+    clear: { windForce: 0, visibility: 1 },
+    rain: { windForce: 0.3, visibility: 0.7, particleCount: 100 },
+    storm: { windForce: 0.8, visibility: 0.4, particleCount: 200 }
+};
+
+// Update gameState object to include weather
 let gameState = {
     players: {},
     bullets: [],
@@ -34,7 +41,12 @@ let gameState = {
     userId: null,
     adminIds: new Set(),
     powerups: [], // Add powerups array to track spawned powerups
-    activePowerups: {} // Track active powerups for the local player
+    activePowerups: {}, // Track active powerups for the local player
+    weather: {
+        current: 'clear',
+        wind: { x: 0, y: 0 },
+        particles: []
+    }
 };
 
 // Game constants
@@ -105,6 +117,13 @@ assets.powerups = {
 assets.powerups.speed.src = '/static/assets/powerups/speed.svg';
 assets.powerups.shield.src = '/static/assets/powerups/shield.svg';
 assets.powerups.damage.src = '/static/assets/powerups/damage.svg';
+
+// Add weather assets after other assets
+assets.weather = {
+    rain: new Image()
+};
+
+assets.weather.rain.src = '/static/assets/weather/rain.svg';
 
 function resizeCanvas() {
     if (!canvas || !camera) return; // Add null check
@@ -487,7 +506,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             for (let i = 0; i < pellets; i++) {
                 const spread = (Math.random() - 0.5) * weapon.spread;
-                const angle = player.rotation + spread;
+                let angle = player.rotation + spread;
+
+                // Apply wind effects to bullet trajectory
+                if (gameState.weather.current !== 'clear') {
+                    const windEffect = 0.1; // Wind effect strength
+                    angle += Math.atan2(gameState.weather.wind.y, gameState.weather.wind.x) * windEffect;
+                }
 
                 const bulletX = player.x + PLAYER_SIZE / 2;
                 const bulletY = player.y + PLAYER_SIZE / 2;
@@ -653,6 +678,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (keys['a']) player.velX = -PLAYER_SPEED * player.speedMultiplier;
         if (keys['d']) player.velX = PLAYER_SPEED * player.speedMultiplier;
 
+        // Apply wind effects to player movement
+        if (gameState.weather.current !== 'clear') {
+            player.velX += gameState.weather.wind.x * 0.5;
+            player.velY += gameState.weather.wind.y * 0.5;
+        }
+
         // Normalize diagonal movement
         if (player.velX !== 0 && player.velY !== 0) {
             player.velX *= 0.707;
@@ -736,6 +767,47 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Apply weather effects to canvas
+        if (gameState.weather.current !== 'clear') {
+            // Add fog/rain effect
+            ctx.fillStyle = `rgba(200, 200, 200, ${0.3 * (1 - WEATHER[gameState.weather.current].visibility)})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw rain particles
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            gameState.weather.particles.forEach((particle, index) => {
+                // Update particle position
+                particle.y += particle.speed;
+                particle.x += gameState.weather.wind.x * 5;
+
+                // Reset particle if it's out of bounds
+                if (particle.y > map.height * tileSize) {
+                    particle.y = 0;
+                    particle.x = Math.random() * (map.width * tileSize);
+                }
+                if (particle.x > map.width * tileSize) {
+                    particle.x = 0;
+                } else if (particle.x < 0) {
+                    particle.x = map.width * tileSize;
+                }
+
+                // Draw particle
+                if (assets.weather.rain.complete) {
+                    ctx.drawImage(
+                        assets.weather.rain,
+                        particle.x - camera.x,
+                        particle.y - camera.y,
+                        4,
+                        16
+                    );
+                }
+            });
+            ctx.restore();
+        }
+
+
         // Draw bullets with proper rotation
         gameState.localBullets.forEach(drawBullet);
         gameState.bullets.forEach(drawBullet);
@@ -813,8 +885,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         minimapCtx.clearRect(0, 0, 150, 150);
         minimapCtx.fillStyle = 'rgba(0, 255, 0, 0.1)';
-        minimapCtx.fillRect(0, 0, 150, 150);
-        const playerX = (player.x / (map.width * tileSize)) * 150;
+        minimapCtx.fillRect(0, 0, 150, 150);const playerX = (player.x / (map.width * tileSize)) * 150;
         const playerY = (player.y / (map.height * tileSize)) * 150;
         minimapCtx.fillStyle = '#e74c3c';
         minimapCtx.fillRect(playerX - 2, playerY - 2, 4, 4);
@@ -1539,7 +1610,46 @@ document.addEventListener('DOMContentLoaded', () => {
         for (let i = 0; i < 3; i++) {
             spawnPowerup();
         }
+        // Initialize weather system
+        updateWeather();
+        // Update weather every 30 seconds
+        setInterval(updateWeather, 30000);
         requestAnimationFrame(gameLoop);
+    }
+
+    // Add after the gameLoop function
+    function updateWeather() {
+        const weatherTypes = ['clear', 'rain', 'storm'];
+        const newWeather = weatherTypes[Math.floor(Math.random() * weatherTypes.length)];
+
+        gameState.weather.current = newWeather;
+        const angle = Math.random() * Math.PI * 2;
+        const force = WEATHER[newWeather].windForce;
+
+        gameState.weather.wind = {
+            x: Math.cos(angle) * force,
+            y: Math.sin(angle) * force
+        };
+
+        // Update rain particles
+        if (newWeather !== 'clear') {
+            initializeWeatherParticles();
+        } else {
+            gameState.weather.particles = [];
+        }
+    }
+
+    function initializeWeatherParticles() {
+        const particleCount = WEATHER[gameState.weather.current].particleCount;
+        gameState.weather.particles = [];
+
+        for (let i = 0; i < particleCount; i++) {
+            gameState.weather.particles.push({
+                x: Math.random() * (map.width * tileSize),
+                y: Math.random() * (map.height * tileSize),
+                speed: 10 + Math.random() * 5
+            });
+        }
     }
 
     // Start the game when socket connects

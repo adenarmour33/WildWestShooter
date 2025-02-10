@@ -118,13 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const chatInput = chatContainer.querySelector('.chat-input');
         const chatMessages = chatContainer.querySelector('.chat-messages');
 
-        chatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && chatInput.value.trim()) {
-                socket.emit('chat_message', { message: chatInput.value.trim() });
-                chatInput.value = '';
-            }
-        });
-
         // Add chat styles
         const style = document.createElement('style');
         style.textContent = `
@@ -178,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return { chatMessages, chatInput };
     }
 
-    // Create command line interface
+    // Command line interface
     function createCommandLine() {
         const cmdContainer = document.createElement('div');
         cmdContainer.className = 'command-line';
@@ -186,7 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cmdContainer.innerHTML = `
             <div class="command-input-container">
                 <span class="command-prompt">/</span>
-                <input type="text" class="command-input" placeholder="Enter command...">
+                <input type="text" class="command-input" placeholder="Type /panel to open admin panel">
             </div>
         `;
         document.body.appendChild(cmdContainer);
@@ -230,15 +223,66 @@ document.addEventListener('DOMContentLoaded', () => {
             .command-input::placeholder {
                 color: rgba(255, 255, 255, 0.5);
             }
+            .admin-panel {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.9);
+                padding: 20px;
+                border-radius: 10px;
+                z-index: 1001;
+                color: white;
+                min-width: 400px;
+            }
+            .admin-panel h2 {
+                margin: 0 0 15px 0;
+                color: #4a9eff;
+            }
+            .admin-panel-close {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                background: none;
+                border: none;
+                color: white;
+                cursor: pointer;
+                font-size: 20px;
+            }
+            .admin-panel select, .admin-panel button {
+                width: 100%;
+                margin: 5px 0;
+                padding: 8px;
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                color: white;
+                border-radius: 4px;
+            }
+            .admin-panel button {
+                background: #4a9eff;
+                border: none;
+                cursor: pointer;
+                transition: background 0.3s;
+            }
+            .admin-panel button:hover {
+                background: #357abd;
+            }
+            .admin-section {
+                margin-bottom: 15px;
+            }
+            .admin-section h3 {
+                margin: 10px 0;
+                color: #bbb;
+            }
         `;
         document.head.appendChild(style);
 
         // Set up command input handling
         cmdInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && cmdInput.value.trim()) {
-                const result = processCommand(cmdInput.value.trim());
-                if (result) {
-                    // Display command result
+            if (e.key === 'Enter' && cmdInput.value.trim().toLowerCase() === '/panel') {
+                if (gameState.isAdmin) {
+                    createAdminPanel();
+                } else {
                     const resultElement = document.createElement('div');
                     resultElement.style.cssText = `
                         position: fixed;
@@ -251,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         border-radius: 5px;
                         z-index: 1001;
                     `;
-                    resultElement.textContent = result;
+                    resultElement.textContent = 'Access denied: Admin privileges required';
                     document.body.appendChild(resultElement);
                     setTimeout(() => document.body.removeChild(resultElement), 3000);
                 }
@@ -278,136 +322,98 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatUI = createChatUI();
     const { cmdContainer, cmdInput } = createCommandLine();
 
-    // Process command function
-    function processCommand(command) {
-        console.log('Processing command:', command);
 
-        // Remove the leading slash if present
-        const cmd = command.startsWith('/') ? command.slice(1).toLowerCase().trim() : command.toLowerCase().trim();
-
-        if (cmd === 'help') {
-            return `Available commands:
-            /help - Show this help message
-            /kill <player_id> - Admin only: Kill specified player
-            /god <player_id> - Admin only: Toggle god mode for player
-            /kick <player_id> - Mod only: Kick player from game
-            /mute <player_id> <duration> - Mod only: Mute player`;
+    // Create admin panel function
+    function createAdminPanel() {
+        // Remove existing panel if it exists
+        const existingPanel = document.querySelector('.admin-panel');
+        if (existingPanel) {
+            existingPanel.remove();
         }
 
-        const [action, ...args] = cmd.split(' ');
-        const targetId = args[0];
+        const panel = document.createElement('div');
+        panel.className = 'admin-panel';
+        panel.innerHTML = `
+            <button class="admin-panel-close">&times;</button>
+            <h2>Admin Panel</h2>
 
-        // Check if user is authenticated
-        if (!gameState.userId) {
-            console.log('Command rejected: User not authenticated');
-            return 'Error: You must be logged in to use commands.';
-        }
+            <div class="admin-section">
+                <h3>Player Management</h3>
+                <select id="playerSelect">
+                    <option value="">Select Player</option>
+                    ${Object.entries(gameState.players)
+                        .filter(([id, player]) => !player.username.startsWith('bot_'))
+                        .map(([id, player]) => 
+                            `<option value="${id}">${player.username}</option>`
+                        ).join('')}
+                </select>
+                <button onclick="adminKillPlayer()">Kill Player</button>
+                <button onclick="adminKickPlayer()">Kick Player</button>
+                <button onclick="adminMutePlayer()">Mute Player</button>
+            </div>
+        `;
 
-        console.log('Command validation - User:', {
-            userId: gameState.userId,
-            isAdmin: gameState.isAdmin,
-            isModerator: gameState.isModerator
+        document.body.appendChild(panel);
+
+        // Add close button functionality
+        panel.querySelector('.admin-panel-close').addEventListener('click', () => {
+            panel.remove();
         });
 
-        // Check permissions and execute command
-        switch(action) {
-            case 'kill':
-                if (!gameState.isAdmin) {
-                    console.log('Kill command rejected: User not admin');
-                    return 'You do not have permission to use this command.';
-                }
-                if (!targetId) {
-                    console.log('Kill command rejected: No target specified');
-                    return 'Kill command requires a player ID.';
-                }
-                console.log('Executing kill command on:', targetId);
-                executeAdminCommand(action, targetId);
-                return `Executing kill command on player ${targetId}`;
-
-            default:
-                console.log('Unknown command:', action);
-                return 'Unknown command. Type /help for available commands.';
-        }
+        // Close panel when clicking outside
+        document.addEventListener('click', function closePanel(e) {
+            if (!panel.contains(e.target) && e.target !== panel) {
+                panel.remove();
+                document.removeEventListener('click', closePanel);
+            }
+        });
     }
 
-
-    // Update the executeAdminCommand function to handle responses
-    function executeAdminCommand(command, targetId) {
-        console.log(`Executing admin command: ${command} on target: ${targetId}`);
-
-        // Check if target exists in players
-        if (!gameState.players[targetId]) {
-            const resultElement = document.createElement('div');
-            resultElement.style.cssText = `
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background: rgba(0, 0, 0, 0.8);
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                z-index: 1001;
-            `;
-            resultElement.textContent = `Player ID '${targetId}' not found`;
-            document.body.appendChild(resultElement);
-            setTimeout(() => document.body.removeChild(resultElement), 3000);
+    // Admin action functions
+    function adminKillPlayer() {
+        const playerId = document.getElementById('playerSelect').value;
+        if (!playerId) {
+            alert('Please select a player');
             return;
         }
 
-        switch(command) {
-            case 'kill':
-                console.log('Sending kill command:', {
-                    command: 'kill',
-                    target_id: targetId,
-                    admin_id: gameState.userId
-                });
-                socket.emit('admin_command', {
-                    command: 'kill',
-                    target_id: targetId,
-                    admin_id: gameState.userId
-                });
-                break;
-            case 'god':
-                socket.emit('admin_command', {
-                    command: 'god_mode',
-                    target_id: targetId,
-                    admin_id: gameState.userId
-                });
-                break;
-            case 'ban':
-                const reason = prompt('Enter ban reason:');
-                if (reason) {
-                    socket.emit('admin_command', {
-                        command: 'ban_player',
-                        target_id: targetId,
-                        admin_id: gameState.userId,
-                        reason: reason
-                    });
-                }
-                break;
-            case 'kick':
-                const kickReason = prompt('Enter kick reason:');
-                if (kickReason) {
-                    socket.emit('admin_command', {
-                        command: 'kick',
-                        target_id: targetId,
-                        admin_id: gameState.userId,
-                        reason: kickReason
-                    });
-                }
-                break;
-            case 'mute':
-                const duration = prompt('Enter mute duration (minutes):', '5');
-                if (duration) {
-                    socket.emit('admin_command', {
-                        command: 'mute',
-                        target_id: targetId,
-                        admin_id: gameState.userId,
-                        duration: parseInt(duration)
-                    });
-                }
-                break;
+        socket.emit('admin_command', {
+            command: 'kill',
+            target_id: playerId
+        });
+    }
+
+    function adminKickPlayer() {
+        const playerId = document.getElementById('playerSelect').value;
+        if (!playerId) {
+            alert('Please select a player');
+            return;
+        }
+
+        const reason = prompt('Enter kick reason:');
+        if (reason) {
+            socket.emit('admin_command', {
+                command: 'kick',
+                target_id: playerId,
+                reason: reason
+            });
+        }
+    }
+
+    function adminMutePlayer() {
+        const playerId = document.getElementById('playerSelect').value;
+        if (!playerId) {
+            alert('Please select a player');
+            return;
+        }
+
+        const duration = prompt('Enter mute duration (minutes):', '5');
+        if (duration) {
+            socket.emit('admin_command', {
+                command: 'mute',
+                target_id: playerId,
+                duration: parseInt(duration)
+            });
         }
     }
 
@@ -600,6 +606,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         updateScoreboard();
+        updatePlayerList(); // Update player list in UI
     }
 
     function checkBulletCollisions() {
@@ -867,74 +874,53 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function updatePlayerList() {
-        const playerList = document.getElementById('playerList');
-        if (!playerList) return;
+        const playerSelect = document.getElementById('playerSelect');
+        if (!playerSelect) return;
 
-        playerList.innerHTML = '<option value="">Select Player</option>';
+        playerSelect.innerHTML = '<option value="">Select Player</option>';
         Object.entries(gameState.players).forEach(([id, player]) => {
-            if (id !== gameState.userId) {  // Don't include self
+            if (id !== gameState.userId && !player.username.startsWith('bot_')) {  // Don't include self or bots
                 const option = document.createElement('option');
                 option.value = id;
                 option.textContent = `${player.username} (ID: ${id})`;
-                playerList.appendChild(option);
+                playerSelect.appendChild(option);
             }
         });
     }
 
-    // Add command line toggle with ' key
-    document.addEventListener('keydown', (e) => {
-        if (e.key === "'") {
-            e.preventDefault();
-            const isVisible = cmdContainer.style.display === 'block';
-            cmdContainer.style.display = isVisible ? 'none' :'block';
-            if (!isVisible) {
-                cmdInput.focus();
-            }
-        }
-    });
-
-    cmdInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter' && cmdInput.value.trim()) {
-            const result = processCommand(cmdInput.value.trim());
-            // Create a temporary message element to show the command result
-            const resultElement = document.createElement('div');
-            resultElement.style.cssText = `
-                position: fixed;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                background: rgba(0, 0, 0, 0.8);
-                color: white;
-                padding: 10px 20px;
-                border-radius: 5px;
-                z-index: 1001;
-            `;
-            resultElement.textContent = result;
-            document.body.appendChild(resultElement);
-            setTimeout(() => document.body.removeChild(resultElement), 3000);
-
-            cmdInput.value = '';
-            cmdContainer.style.display = 'none';
-        }
-    });
-
     // Socket events for chat
-    socket.on('chat_message', (data) => {
+    socket.on('chat_update', (data) => {
         if (!chatUI.chatMessages) return;
 
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'chat-message';
+        // Clear existing messages
+        chatUI.chatMessages.innerHTML = '';
 
-        const timestamp = new Date().toLocaleTimeString();
-        messageDiv.innerHTML = `
-            <span class="chat-timestamp">[${timestamp}]</span>
-            <span class="chat-username">${data.username}:</span>
-            <span class="chat-text">${data.message}</span>
+        // Add all messages
+        data.messages.forEach(msg => {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'chat-message';
+            messageDiv.innerHTML =`
+            <span class="chat-timestamp">[${msg.timestamp}]</span>
+            <span class="chat-username">${msg.username}:</span>
+            <span class="chat-text">${msg.message}</span>
         `;
+            chatUI.chatMessages.appendChild(messageDiv);
+        });
 
-        chatUI.chatMessages.appendChild(messageDiv);
+        // Scroll to bottom
         chatUI.chatMessages.scrollTop = chatUI.chatMessages.scrollHeight;
     });
+
+    // Update chat input handling
+    const chatInput = document.querySelector('.chat-input');
+    if (chatInput) {
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && chatInput.value.trim()) {
+                socket.emit('chat_message', { message: chatInput.value.trim() });
+                chatInput.value = '';
+            }
+        });
+    }
 
     // Update socket events for admin commands
     socket.on('admin_command_result', (data) => {

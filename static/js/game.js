@@ -504,16 +504,51 @@ document.addEventListener('DOMContentLoaded', () => {
         updatePlayerList(); // Update player list in UI
     }
 
+    // Update checkBulletCollisions function to properly handle bot damage
     function checkBulletCollisions() {
         const PLAYER_HITBOX = 24;
 
         gameState.bullets = gameState.bullets.filter(bullet => {
-            // Check bullet lifetime
-            if (Date.now() - bullet.created_at > 2000) {
-                return false;
+            if (Date.now() - bullet.created_at > 2000) return false;
+
+            // Check collision with all players (including bots)
+            for (const [id, targetPlayer] of Object.entries(gameState.players)) {
+                // Skip if:
+                // - Target is the shooter
+                // - Target is already dead
+                // - Target is the local player (handled separately)
+                if (id === bullet.shooter || targetPlayer.health <= 0 || id === socket.id) continue;
+
+                const dx = targetPlayer.x + PLAYER_SIZE / 2 - bullet.x;
+                const dy = targetPlayer.y + PLAYER_SIZE / 2 - bullet.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < PLAYER_HITBOX) {
+                    console.log('Hit detected on player/bot:', {
+                        targetId: id,
+                        isBot: id.startsWith('bot_'),
+                        damage: bullet.damage,
+                        shooterId: bullet.shooter,
+                        currentHealth: targetPlayer.health
+                    });
+
+                    // Add hit effect
+                    createHitEffect(bullet.x, bullet.y);
+
+                    // Emit hit event to server
+                    socket.emit('player_hit', {
+                        damage: bullet.damage,
+                        shooter: bullet.shooter,
+                        target_id: id,
+                        weapon: bullet.weapon,
+                        is_bot: id.startsWith('bot_')
+                    });
+
+                    return false;
+                }
             }
 
-            // Check collision with current player
+            // Check collision with local player
             if (bullet.shooter !== socket.id && player.health > 0) {
                 const dx = player.x + PLAYER_SIZE / 2 - bullet.x;
                 const dy = player.y + PLAYER_SIZE / 2 - bullet.y;
@@ -545,55 +580,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // Check collision with other players
-            for (const [id, otherPlayer] of Object.entries(gameState.players)) {
-                if (id === bullet.shooter || otherPlayer.health <= 0 || id === socket.id) continue;
-
-                const dx = otherPlayer.x + PLAYER_SIZE / 2 - bullet.x;
-                const dy = otherPlayer.y + PLAYER_SIZE / 2 - bullet.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-
-                if (distance < PLAYER_HITBOX) {
-                    console.log('Hit detected on other player:', {
-                        damage: bullet.damage,
-                        targetId: id,
-                        shooterId: bullet.shooter
-                    });
-
-                    // Add hit effect
-                    createHitEffect(bullet.x, bullet.y);
-
-                    // Emit hit event to server
-                    socket.emit('player_hit', {
-                        damage: bullet.damage,
-                        shooter: bullet.shooter,
-                        target_id: id,
-                        weapon: bullet.weapon
-                    });
-
-                    return false;
-                }
-            }
-
             // Update bullet position
             bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
             bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
 
             // Keep bullet in bounds
-            return bullet.x >= 0 && bullet.x <= map.width * tileSize &&
-                   bullet.y >= 0 && bullet.y <= map.height * tileSize;
-        });
-
-        // Also check local bullets
-        gameState.localBullets = gameState.localBullets.filter(bullet => {
-            const dx = player.x + PLAYER_SIZE / 2 - bullet.x;
-            const dy = player.y + PLAYER_SIZE / 2 - bullet.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance < PLAYER_HITBOX) {
-                return false;
-            }
-
             return bullet.x >= 0 && bullet.x <= map.width * tileSize &&
                    bullet.y >= 0 && bullet.y <= map.height * tileSize;
         });
@@ -1183,21 +1174,36 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('player_hit', (data) => {
         console.log('Hit event received from server:', data);
 
+        // Update local player if they were hit
         if (data.target_id === socket.id && player.health > 0) {
-            // Apply damage to local player
             const oldHealth = player.health;
             player.health = Math.max(0, player.health - data.damage);
 
-            console.log('Health updated:', {
+            console.log('Local player health updated:', {
                 oldHealth: oldHealth,
                 newHealth: player.health,
                 damageTaken: data.damage
             });
 
-            // Create hit effect
             createHitEffect(player.x + PLAYER_SIZE / 2, player.y + PLAYER_SIZE / 2);
 
-            // Update UI
+            updateUI();
+        }
+        // Update other players/bots in gameState
+        else if (gameState.players[data.target_id]) {
+            const targetPlayer = gameState.players[data.target_id];
+            const oldHealth = targetPlayer.health;
+            targetPlayer.health = Math.max(0, targetPlayer.health - data.damage);
+
+            console.log('Other player/bot health updated:', {
+                targetId: data.target_id,
+                isBot: data.target_id.startsWith('bot_'),
+                oldHealth: oldHealth,
+                newHealth: targetPlayer.health,
+                damageTaken: data.damage
+            });
+
+            createHitEffect(targetPlayer.x + PLAYER_SIZE / 2, targetPlayer.y + PLAYER_SIZE / 2);
             updateUI();
         }
     });
@@ -1212,6 +1218,44 @@ function checkBulletCollisions() {
     gameState.bullets = gameState.bullets.filter(bullet => {
         if (Date.now() - bullet.created_at > 2000) return false;
 
+        // Check collision with all players (including bots)
+        for (const [id, targetPlayer] of Object.entries(gameState.players)) {
+            // Skip if:
+            // - Target is the shooter
+            // - Target is already dead
+            // - Target is the local player (handled separately)
+            if (id === bullet.shooter || targetPlayer.health <= 0 || id === socket.id) continue;
+
+            const dx = targetPlayer.x + PLAYER_SIZE / 2 - bullet.x;
+            const dy = targetPlayer.y + PLAYER_SIZE / 2 - bullet.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            if (distance < PLAYER_HITBOX) {
+                console.log('Hit detected on player/bot:', {
+                    targetId: id,
+                    isBot: id.startsWith('bot_'),
+                    damage: bullet.damage,
+                    shooterId: bullet.shooter,
+                    currentHealth: targetPlayer.health
+                });
+
+                // Add hit effect
+                createHitEffect(bullet.x, bullet.y);
+
+                // Emit hit event to server
+                socket.emit('player_hit', {
+                    damage: bullet.damage,
+                    shooter: bullet.shooter,
+                    target_id: id,
+                    weapon: bullet.weapon,
+                    is_bot: id.startsWith('bot_')
+                });
+
+                return false;
+            }
+        }
+
+        // Check collision with local player
         if (bullet.shooter !== socket.id && player.health > 0) {
             const dx = player.x + PLAYER_SIZE / 2 - bullet.x;
             const dy = player.y + PLAYER_SIZE / 2 - bullet.y;
@@ -1243,52 +1287,11 @@ function checkBulletCollisions() {
             }
         }
 
-        for (const [id, otherPlayer] of Object.entries(gameState.players)) {
-            if (id === bullet.shooter || otherPlayer.health <= 0 || id === socket.id) continue;
-
-            const dx = otherPlayer.x + PLAYER_SIZE / 2 - bullet.x;
-            const dy = otherPlayer.y + PLAYER_SIZE / 2 - bullet.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance < PLAYER_HITBOX) {
-                console.log('Hit detected on other player:', {
-                    damage: bullet.damage,
-                    targetId: id,
-                    shooterId: bullet.shooter
-                });
-
-                // Add hit effect
-                createHitEffect(bullet.x, bullet.y);
-
-                // Emit hit event to server
-                socket.emit('player_hit', {
-                    damage: bullet.damage,
-                    shooter: bullet.shooter,
-                    target_id: id,
-                    weapon: bullet.weapon
-                });
-
-                return false;
-            }
-        }
-
+        // Update bullet position
         bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
         bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
 
-        return bullet.x >= 0 && bullet.x <= map.width * tileSize &&
-               bullet.y >= 0 && bullet.y <= map.height * tileSize;
-    });
-
-    // Also check local bullets
-    gameState.localBullets = gameState.localBullets.filter(bullet => {
-        const dx = player.x + PLAYER_SIZE / 2 - bullet.x;
-        const dy = player.y + PLAYER_SIZE / 2 - bullet.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (distance < PLAYER_HITBOX) {
-            return false;
-        }
-
+        // Keep bullet in bounds
         return bullet.x >= 0 && bullet.x <= map.width * tileSize &&
                bullet.y >= 0 && bullet.y <= map.height * tileSize;
     });
